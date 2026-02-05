@@ -34,7 +34,7 @@ pub mod types;
 pub mod utils;
 
 pub use commands::{bump_version, publish, update_crate};
-pub use types::{PackageInfo, PublishOrderData};
 pub use semver::Version;
+pub use types::{PackageInfo, PublishOrderData};
 
 pub type Result<T> = anyhow::Result<T>;
