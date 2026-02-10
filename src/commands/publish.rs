@@ -1,11 +1,11 @@
 use {
-    crate::common::{check_docker_available, get_git_root_path},
+    crate::types::{PackageInfo, PublishOrderData},
+    crate::utils::{check_docker_available, get_git_root_path},
     anyhow::{anyhow, Result},
     cargo_metadata::{MetadataCommand, PackageId},
     clap::{Args, Subcommand},
     log::info,
     scopeguard::defer,
-    serde::Serialize,
     std::{
         collections::{HashMap, HashSet},
         fs,
@@ -56,20 +56,6 @@ pub fn run(args: CommandArgs) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct PackageInfo {
-    pub name: String,
-    pub path: PathBuf,
-    pub dependencies: HashSet<PackageId>,
-}
-
-#[derive(Debug)]
-pub struct PublishOrderData {
-    pub levels: Vec<Vec<PackageId>>,
-    pub id_to_level: HashMap<PackageId, usize>,
-    pub id_to_package_info: HashMap<PackageId, PackageInfo>,
-}
-
 pub fn compute_publish_order_data(manifest_path: &str) -> Result<PublishOrderData> {
     let mut cmd = MetadataCommand::new();
     cmd.manifest_path(manifest_path);
@@ -114,6 +100,14 @@ pub fn compute_publish_order_data(manifest_path: &str) -> Result<PublishOrderDat
                 for dep in node.deps.iter() {
                     // skip self dependencies
                     if dep.pkg == node.id {
+                        continue;
+                    }
+                    // skip dev-only dependencies - they don't affect publish order
+                    if dep
+                        .dep_kinds
+                        .iter()
+                        .all(|dk| dk.kind == cargo_metadata::DependencyKind::Development)
+                    {
                         continue;
                     }
                     if id_to_package_info.contains_key(&dep.pkg) {
