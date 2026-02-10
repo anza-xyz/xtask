@@ -72,7 +72,7 @@ jobs:
           LLVM_PROFILE_FILE: "target/coverage/profraw/xtask-%p-%m.profraw"
         run: cargo test --all-features
 
-      - name: Generate coverage report
+      - name: Generate lcov report
         run: |
           grcov target/coverage/profraw \
             --binary-path target/debug \
@@ -82,10 +82,26 @@ jobs:
             --ignore "*/tests/*" \
             --output-path target/coverage/lcov.info
 
-      # Skip upload when running locally with act (GitHub Actions local testing tool)
       - name: Upload to codecov
         if: ${{ !env.ACT }}
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: target/coverage/lcov.info
-          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Generate HTML report
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          grcov target/coverage/profraw \
+            --binary-path target/debug \
+            --source-dir . \
+            --output-type html \
+            --ignore "/*" \
+            --ignore "*/tests/*" \
+            --output-path target/coverage/html
+
+      - name: Upload HTML coverage report
+        if: ${{ !env.ACT && github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/coverage/html
