@@ -62,53 +62,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust nightly
-        uses: dtolnay/rust-toolchain@nightly
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
 
-      - name: Install grcov
-        run: cargo install grcov
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Run tests with coverage
-        env:
-          RUSTFLAGS: "-C instrument-coverage"
-          LLVM_PROFILE_FILE: "target/coverage/profraw/xtask-%p-%m.profraw"
-        run: |
-          mkdir -p target/coverage/profraw
-          cargo test --all-features
-
-      - name: Generate lcov report
-        run: |
-          grcov target/coverage/profraw \
-            --binary-path target/debug \
-            --source-dir . \
-            --output-type lcov \
-            --ignore "/*" \
-            --ignore "*/tests/*" \
-            --output-path target/coverage/lcov.info
+        run: cargo llvm-cov --all-features --lcov --output-path target/lcov.info
 
       - name: Upload to codecov
         if: ${{ !env.ACT }}
         uses: codecov/codecov-action@v5
         with:
-          files: target/coverage/lcov.info
+          files: target/lcov.info
           use_oidc: true
 
       - name: Generate HTML report
         if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          grcov target/coverage/profraw \
-            --binary-path target/debug \
-            --source-dir . \
-            --output-type html \
-            --ignore "/*" \
-            --ignore "*/tests/*" \
-            --output-path target/coverage/html
+        run: cargo llvm-cov --all-features --html --output-dir target/coverage-html
 
       - name: Upload HTML coverage report
         if: ${{ !env.ACT && github.event_name == 'pull_request' }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: target/coverage/html
+          path: target/coverage-html
