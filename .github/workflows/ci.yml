@@ -74,7 +74,9 @@ jobs:
         env:
           RUSTFLAGS: "-C instrument-coverage"
           LLVM_PROFILE_FILE: "target/coverage/profraw/xtask-%p-%m.profraw"
-        run: cargo test --all-features
+        run: |
+          mkdir -p target/coverage/profraw
+          cargo test --all-features
 
       - name: Generate lcov report
         run: |
