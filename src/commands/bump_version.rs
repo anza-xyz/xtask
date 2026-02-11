@@ -34,7 +34,7 @@ pub fn run(args: CommandArgs) -> Result<()> {
     let current_version = Version::parse(&current_version_str)?;
 
     // bump the version
-    let new_version = bump_version(&args.level, &current_version);
+    let new_version = bump_version(&args.level, &current_version)?;
 
     // get all crates
     let all_crates = crate::common::get_all_crates().context("failed to get all crates")?;
@@ -140,7 +140,7 @@ pub fn run(args: CommandArgs) -> Result<()> {
     Ok(())
 }
 
-pub fn bump_version(level: &BumpLevel, current: &Version) -> Version {
+pub fn bump_version(level: &BumpLevel, current: &Version) -> Result<Version> {
     let mut new_version = current.clone();
     match level {
         BumpLevel::Major => {
@@ -167,7 +167,7 @@ pub fn bump_version(level: &BumpLevel, current: &Version) -> Version {
         }
     }
 
-    new_version
+    Ok(new_version)
 }
 
 #[cfg(test)]
@@ -177,29 +177,29 @@ mod tests {
     #[test]
     fn test_bump_version_major() {
         assert_eq!(
-            bump_version(&BumpLevel::Major, &Version::parse("1.0.0").unwrap()),
+            bump_version(&BumpLevel::Major, &Version::parse("1.0.0").unwrap()).unwrap(),
             Version::parse("2.0.0").unwrap()
         );
 
         assert_eq!(
-            bump_version(&BumpLevel::Major, &Version::parse("1.1.0").unwrap()),
+            bump_version(&BumpLevel::Major, &Version::parse("1.1.0").unwrap()).unwrap(),
             Version::parse("2.0.0").unwrap()
         );
 
         assert_eq!(
-            bump_version(&BumpLevel::Major, &Version::parse("1.1.1").unwrap()),
+            bump_version(&BumpLevel::Major, &Version::parse("1.1.1").unwrap()).unwrap(),
             Version::parse("2.0.0").unwrap()
         );
     }
     #[test]
     fn test_bump_version_minor() {
         assert_eq!(
-            bump_version(&BumpLevel::Minor, &Version::parse("1.0.0").unwrap()),
+            bump_version(&BumpLevel::Minor, &Version::parse("1.0.0").unwrap()).unwrap(),
             Version::parse("1.1.0").unwrap()
         );
 
         assert_eq!(
-            bump_version(&BumpLevel::Minor, &Version::parse("1.2.1").unwrap()),
+            bump_version(&BumpLevel::Minor, &Version::parse("1.2.1").unwrap()).unwrap(),
             Version::parse("1.3.0").unwrap()
         );
     }
@@ -207,7 +207,7 @@ mod tests {
     #[test]
     fn test_bump_version_patch() {
         assert_eq!(
-            bump_version(&BumpLevel::Patch, &Version::parse("1.0.0").unwrap()),
+            bump_version(&BumpLevel::Patch, &Version::parse("1.0.0").unwrap()).unwrap(),
             Version::parse("1.0.1").unwrap()
         );
     }
@@ -218,28 +218,32 @@ mod tests {
             bump_version(
                 &BumpLevel::PreRelease,
                 &Version::parse("1.2.3-alpha.0").unwrap()
-            ),
+            )
+            .unwrap(),
             Version::parse("1.2.3-alpha.1").unwrap()
         );
         assert_eq!(
             bump_version(
                 &BumpLevel::PreRelease,
                 &Version::parse("1.2.3-alpha.1").unwrap()
-            ),
+            )
+            .unwrap(),
             Version::parse("1.2.3-alpha.2").unwrap()
         );
         assert_eq!(
             bump_version(
                 &BumpLevel::PreRelease,
                 &Version::parse("1.2.3-beta.0").unwrap()
-            ),
+            )
+            .unwrap(),
             Version::parse("1.2.3-beta.1").unwrap()
         );
         assert_eq!(
             bump_version(
                 &BumpLevel::PreRelease,
                 &Version::parse("1.2.3-rc.0").unwrap()
-            ),
+            )
+            .unwrap(),
             Version::parse("1.2.3-rc.1").unwrap()
         );
     }
