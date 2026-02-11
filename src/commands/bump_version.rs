@@ -25,6 +25,10 @@ pub enum BumpLevel {
         help = "Bump prerelease suffix: x.y.z-<tag>.n -> x.y.z-<tag>.n+1 (e.g. alpha/beta/rc)"
     )]
     PreRelease,
+    #[value(
+        help = "Promote prerelease stage: alpha.n -> beta.0, beta.n -> rc.0, rc.n -> '' (removed rc prerelease)"
+    )]
+    PromotePreRelease,
 }
 
 pub fn run(args: CommandArgs) -> Result<()> {
@@ -165,6 +169,24 @@ pub fn bump_version(level: &BumpLevel, current: &Version) -> Result<Version> {
                 }
             }
         }
+        BumpLevel::PromotePreRelease => {
+            if let Some((prefix, _)) = current.pre.as_str().split_once('.') {
+                match prefix {
+                    "alpha" => {
+                        new_version.pre = semver::Prerelease::new("beta.0").unwrap();
+                    }
+                    "beta" => {
+                        new_version.pre = semver::Prerelease::new("rc.0").unwrap();
+                    }
+                    "rc" => {
+                        new_version.pre = semver::Prerelease::new("").unwrap();
+                    }
+                    _ => {
+                        return Err(anyhow!("unexpected prerelease prefix: {prefix}"));
+                    }
+                }
+            }
+        }
     }
 
     Ok(new_version)
@@ -245,6 +267,45 @@ mod tests {
             )
             .unwrap(),
             Version::parse("1.2.3-rc.1").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_bump_version_promote_prerelease() {
+        assert_eq!(
+            bump_version(
+                &BumpLevel::PromotePreRelease,
+                &Version::parse("1.2.3-alpha.0").unwrap()
+            )
+            .unwrap(),
+            Version::parse("1.2.3-beta.0").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(
+                &BumpLevel::PromotePreRelease,
+                &Version::parse("1.2.3-alpha.1").unwrap()
+            )
+            .unwrap(),
+            Version::parse("1.2.3-beta.0").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(
+                &BumpLevel::PromotePreRelease,
+                &Version::parse("1.2.3-beta.0").unwrap()
+            )
+            .unwrap(),
+            Version::parse("1.2.3-rc.0").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(
+                &BumpLevel::PromotePreRelease,
+                &Version::parse("1.2.3-rc.0").unwrap()
+            )
+            .unwrap(),
+            Version::parse("1.2.3").unwrap()
         );
     }
 }
