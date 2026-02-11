@@ -18,6 +18,7 @@ pub enum BumpLevel {
     Major,
     Minor,
     Patch,
+    PreRelease,
 }
 
 pub fn run(args: CommandArgs) -> Result<()> {
@@ -148,6 +149,16 @@ pub fn bump_version(level: &BumpLevel, current: &Version) -> Version {
         BumpLevel::Patch => {
             new_version.patch = new_version.patch.saturating_add(1);
         }
+        BumpLevel::PreRelease => {
+            if let Some((prefix, number_str)) = current.pre.as_str().split_once('.') {
+                if let Ok(number) = number_str.parse::<u64>() {
+                    let next = number.saturating_add(1);
+                    if let Ok(next_pre) = semver::Prerelease::new(&format!("{prefix}.{next}")) {
+                        new_version.pre = next_pre;
+                    }
+                }
+            }
+        }
     }
 
     new_version
@@ -195,6 +206,31 @@ mod tests {
             assert_eq!(
                 bump_version(&BumpLevel::Patch, &Version::parse("1.0.0").unwrap()),
                 Version::parse("1.0.1").unwrap()
+            );
+        }
+
+        // bump pre-release
+        {
+            assert_eq!(
+                bump_version(
+                    &BumpLevel::PreRelease,
+                    &Version::parse("1.2.3-alpha.0").unwrap()
+                ),
+                Version::parse("1.2.3-alpha.1").unwrap()
+            );
+            assert_eq!(
+                bump_version(
+                    &BumpLevel::PreRelease,
+                    &Version::parse("1.2.3-beta.0").unwrap()
+                ),
+                Version::parse("1.2.3-beta.1").unwrap()
+            );
+            assert_eq!(
+                bump_version(
+                    &BumpLevel::PreRelease,
+                    &Version::parse("1.2.3-rc.0").unwrap()
+                ),
+                Version::parse("1.2.3-rc.1").unwrap()
             );
         }
     }
