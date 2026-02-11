@@ -9,6 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+permissions:
+  # Required for OIDC: https://docs.github.com/en/actions/how-tos/secure-your-work/security-harden-deployments/oidc-in-cloud-providers#adding-permissions-settings
+  id-token: write
+
 jobs:
   test:
     name: Test
