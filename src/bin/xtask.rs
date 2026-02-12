@@ -4,9 +4,6 @@ use {
     log::error,
 };
 
-mod commands;
-mod common;
-
 #[derive(Parser)]
 #[command(name = "xtask", about = "Build tasks", version)]
 struct Xtask {
@@ -22,23 +19,21 @@ enum Commands {
     #[command(about = "Hello")]
     Hello,
     #[command(about = "Bump version")]
-    BumpVersion(commands::bump_version::CommandArgs),
+    BumpVersion(xtask::commands::bump_version::CommandArgs),
     #[command(about = "Update crate version")]
-    UpdateCrate(commands::update_crate::CommandArgs),
+    UpdateCrate(xtask::commands::update_crate::CommandArgs),
     #[command(about = "Publish crates")]
-    Publish(commands::publish::CommandArgs),
+    Publish(xtask::commands::publish::CommandArgs),
 }
 
 #[derive(Args, Debug)]
 pub struct GlobalOptions {
-    /// Enable verbose (debug) logging
     #[arg(short, long, global = true)]
     pub verbose: bool,
 }
 
-#[tokio::main]
-async fn main() {
-    if let Err(err) = try_main().await {
+fn main() {
+    if let Err(err) = try_main() {
         error!("Error: {err}");
         for (i, cause) in err.chain().skip(1).enumerate() {
             error!("  {}: {}", i.saturating_add(1), cause);
@@ -47,11 +42,9 @@ async fn main() {
     }
 }
 
-async fn try_main() -> Result<()> {
-    // parse the command line arguments
+fn try_main() -> Result<()> {
     let xtask = Xtask::parse();
 
-    // set the log level
     if xtask.global.verbose {
         std::env::set_var("RUST_LOG", "debug");
     } else {
@@ -59,17 +52,16 @@ async fn try_main() -> Result<()> {
     }
     env_logger::init();
 
-    // run the command
     match xtask.command {
-        Commands::Hello => commands::hello::run()?,
+        Commands::Hello => xtask::commands::hello::run()?,
         Commands::BumpVersion(args) => {
-            commands::bump_version::run(args)?;
+            xtask::commands::bump_version::run(args)?;
         }
         Commands::UpdateCrate(args) => {
-            commands::update_crate::run(args)?;
+            xtask::commands::update_crate::run(args)?;
         }
         Commands::Publish(args) => {
-            commands::publish::run(args)?;
+            xtask::commands::publish::run(args)?;
         }
     }
 
