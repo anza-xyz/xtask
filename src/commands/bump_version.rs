@@ -190,9 +190,11 @@ pub fn bump_version(level: &BumpLevel, current: &Version) -> Result<Version> {
                         new_version.pre = semver::Prerelease::new("").unwrap();
                     }
                     _ => {
-                        return Err(anyhow!("unexpected prerelease prefix: {prefix}"));
+                        return Err(anyhow!("unexpected prerelease format: {}, only alpha, beta, and rc are supported", current.pre));
                     }
                 }
+            } else {
+                return Err(anyhow!("unexpected prerelease format: {}", current.pre));
             }
         }
         BumpLevel::PatchOrPreRelease => {
@@ -285,16 +287,22 @@ mod tests {
         );
 
         assert_eq!(
-            bump_version(&BumpLevel::PreRelease, &Version::parse("1.2.3-alpha123").unwrap())
-                .unwrap_err()
-                .to_string(),
+            bump_version(
+                &BumpLevel::PreRelease,
+                &Version::parse("1.2.3-alpha123").unwrap()
+            )
+            .unwrap_err()
+            .to_string(),
             "unexpected prerelease format: alpha123",
         );
 
         assert_eq!(
-            bump_version(&BumpLevel::PreRelease, &Version::parse("1.2.3-alpha.custom").unwrap())
-                .unwrap_err()
-                .to_string(),
+            bump_version(
+                &BumpLevel::PreRelease,
+                &Version::parse("1.2.3-alpha.custom").unwrap()
+            )
+            .unwrap_err()
+            .to_string(),
             "unexpected prerelease format: alpha.custom",
         );
     }
@@ -335,6 +343,26 @@ mod tests {
             )
             .unwrap(),
             Version::parse("1.2.3").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(
+                &BumpLevel::PromotePreRelease,
+                &Version::parse("1.2.3-alpha123").unwrap()
+            )
+            .unwrap_err()
+            .to_string(),
+            "unexpected prerelease format: alpha123",
+        );
+
+        assert_eq!(
+            bump_version(
+                &BumpLevel::PromotePreRelease,
+                &Version::parse("1.2.3-custom.1").unwrap()
+            )
+            .unwrap_err()
+            .to_string(),
+            "unexpected prerelease format: custom.1, only alpha, beta, and rc are supported"
         );
     }
 
