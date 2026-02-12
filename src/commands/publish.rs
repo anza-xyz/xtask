@@ -479,45 +479,10 @@ fn update_workspace_manifest_registry(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    #[test]
-    fn test_package_info_creation() {
-        use std::collections::HashSet;
-
-        let deps = HashSet::new();
-        let pkg_info = PackageInfo {
-            name: "test-crate".to_string(),
-            path: PathBuf::from("/test/path"),
-            dependencies: deps,
-        };
-        assert_eq!(pkg_info.name, "test-crate");
-        assert_eq!(pkg_info.dependencies.len(), 0);
-    }
-
-    #[test]
-    fn test_publish_order_data_structure() {
-        let manifest = "tests/dummy-workspace/Cargo.toml";
-        let result = compute_publish_order_data(manifest);
-        assert!(result.is_ok(), "Should successfully compute order");
-        let data = result.unwrap();
-        assert!(!data.levels.is_empty(), "Should have at least one level");
-        assert!(!data.id_to_package_info.is_empty(), "Should have packages");
-
-        for level in &data.levels {
-            for pkg_id in level {
-                assert!(
-                    data.id_to_package_info.contains_key(pkg_id),
-                    "Package {} should be in id_to_package_info map",
-                    pkg_id
-                );
-            }
-        }
-    }
 
     #[test]
     fn test_dependencies_are_in_earlier_levels() {
-        let manifest = "tests/dummy-workspace/Cargo.toml";
+        let manifest = "tests/dummy-workspace-publish-test/Cargo.toml";
         let result = compute_publish_order_data(manifest);
         assert!(result.is_ok(), "Should successfully compute order");
         let data = result.unwrap();
@@ -546,13 +511,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn test_publish_order_tree_output() {
-        let manifest = "tests/dummy-workspace/Cargo.toml";
-        let result = publish_order_tree(manifest);
-        assert!(result.is_ok(), "Tree output should succeed");
     }
 
     #[test]
@@ -590,6 +548,68 @@ mod tests {
         };
         let result = run(args);
         assert!(result.is_ok(), "Should succeed with Tree format");
+    }
+
+    #[test]
+    fn test_publish_excluded_packages() {
+        let manifest = "tests/dummy-workspace-publish-excluded/Cargo.toml";
+        let result = compute_publish_order_data(manifest);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        let names: Vec<&str> = data
+            .id_to_package_info
+            .values()
+            .map(|p| p.name.as_str())
+            .collect();
+        assert!(
+            names.contains(&"publishable"),
+            "publishable should be included"
+        );
+        assert!(
+            !names.contains(&"excluded"),
+            "excluded (publish=[]) should be filtered out"
+        );
+        assert_eq!(data.levels.len(), 1);
+    }
+
+    #[test]
+    fn test_publish_order_exact_levels() {
+        // dummy-workspace-publish-test has: a (no deps), b (depends on a),
+        // c (depends on b), d (depends on a and c)
+        // expected levels: 0=[a], 1=[b], 2=[c], 3=[d]
+        let manifest = "tests/dummy-workspace-publish-test/Cargo.toml";
+        let result = compute_publish_order_data(manifest);
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        assert_eq!(data.levels.len(), 4);
+
+        let mut name_to_level: std::collections::HashMap<String, usize> = Default::default();
+        for (level_idx, level) in data.levels.iter().enumerate() {
+            for pkg_id in level {
+                name_to_level.insert(data.id_to_package_info[pkg_id].name.clone(), level_idx);
+            }
+        }
+
+        assert_eq!(name_to_level["a"], 0);
+        assert_eq!(name_to_level["b"], 1);
+        assert_eq!(name_to_level["c"], 2);
+        assert_eq!(
+            name_to_level["d"], 3,
+            "d depends on a and c, so it must be last"
+        );
+    }
+
+    #[test]
+    fn test_publish_order_tree_with_dependencies() {
+        // uses a workspace with inter-dependencies to exercise the dependency display path
+        let manifest = "tests/dummy-workspace-publish-test/Cargo.toml";
+        let result = publish_order_tree(manifest);
+        assert!(
+            result.is_ok(),
+            "Tree output with dependencies should succeed"
+        );
     }
 
     #[test]

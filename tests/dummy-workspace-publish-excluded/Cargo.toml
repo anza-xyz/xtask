@@ -1,0 +1,8 @@
+[workspace]
+members = ["publishable", "excluded"]
+
+resolver = "2"
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
