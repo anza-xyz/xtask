@@ -170,7 +170,11 @@ pub fn bump_version(level: &BumpLevel, current: &Version) -> Result<Version> {
                     if let Ok(next_pre) = semver::Prerelease::new(&format!("{prefix}.{next}")) {
                         new_version.pre = next_pre;
                     }
+                } else {
+                    return Err(anyhow!("unexpected prerelease format: {}", current.pre));
                 }
+            } else {
+                return Err(anyhow!("unexpected prerelease format: {}", current.pre));
             }
         }
         BumpLevel::PromotePreRelease => {
@@ -278,6 +282,20 @@ mod tests {
             )
             .unwrap(),
             Version::parse("1.2.3-rc.1").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(&BumpLevel::PreRelease, &Version::parse("1.2.3-alpha123").unwrap())
+                .unwrap_err()
+                .to_string(),
+            "unexpected prerelease format: alpha123",
+        );
+
+        assert_eq!(
+            bump_version(&BumpLevel::PreRelease, &Version::parse("1.2.3-alpha.custom").unwrap())
+                .unwrap_err()
+                .to_string(),
+            "unexpected prerelease format: alpha.custom",
         );
     }
 
