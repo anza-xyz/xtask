@@ -32,10 +32,7 @@
 pub mod commands;
 pub mod utils;
 
-pub use commands::bump_version;
-pub use commands::publish;
-pub use commands::update_crate;
-
+pub use commands::{bump_version, publish, update_crate};
 pub use semver::Version;
 
 pub type Result<T> = anyhow::Result<T>;
