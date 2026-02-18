@@ -5,7 +5,6 @@ use {
     clap::{Args, Subcommand},
     log::info,
     scopeguard::defer,
-    serde::Serialize,
     std::{
         collections::{HashMap, HashSet},
         fs,
@@ -16,6 +15,19 @@ use {
     },
     toml_edit::{value, DocumentMut},
 };
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PackageInfo {
+    pub name: String,
+    pub path: std::path::PathBuf,
+    pub dependencies: HashSet<PackageId>,
+}
+
+pub struct PublishOrderData {
+    pub levels: Vec<Vec<PackageId>>,
+    pub id_to_level: std::collections::HashMap<PackageId, usize>,
+    pub id_to_package_info: HashMap<PackageId, PackageInfo>,
+}
 
 #[derive(Debug, Clone, clap::ValueEnum)]
 pub enum OutputFormat {
@@ -54,20 +66,6 @@ pub fn run(args: CommandArgs) -> Result<()> {
         }
     }
     Ok(())
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct PackageInfo {
-    pub name: String,
-    pub path: PathBuf,
-    pub dependencies: HashSet<PackageId>,
-}
-
-#[derive(Debug)]
-pub struct PublishOrderData {
-    pub levels: Vec<Vec<PackageId>>,
-    pub id_to_level: HashMap<PackageId, usize>,
-    pub id_to_package_info: HashMap<PackageId, PackageInfo>,
 }
 
 pub fn compute_publish_order_data(manifest_path: &str) -> Result<PublishOrderData> {
