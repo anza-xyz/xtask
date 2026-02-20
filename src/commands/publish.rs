@@ -114,6 +114,14 @@ pub fn compute_publish_order_data(manifest_path: &str) -> Result<PublishOrderDat
                     if dep.pkg == node.id {
                         continue;
                     }
+                    // skip dev-only dependencies - they don't affect publish order
+                    if dep
+                        .dep_kinds
+                        .iter()
+                        .all(|dk| dk.kind == cargo_metadata::DependencyKind::Development)
+                    {
+                        continue;
+                    }
                     if id_to_package_info.contains_key(&dep.pkg) {
                         package_info.dependencies.insert(dep.pkg.clone());
                     }

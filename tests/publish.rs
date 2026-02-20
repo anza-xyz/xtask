@@ -53,6 +53,42 @@ fn test_publish_order() {
 }
 
 #[test]
+fn test_publish_order_ignores_dev_deps() {
+    let current_file_path_str = file!();
+    let workspace_path = fs::canonicalize(
+        Path::new(current_file_path_str)
+            .parent()
+            .unwrap()
+            .join("dummy-workspace-dev-deps"),
+    )
+    .unwrap();
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!()
+        .args([
+            "publish",
+            "--manifest-path",
+            workspace_path.join("Cargo.toml").to_str().unwrap(),
+            "order",
+            "--format",
+            "json",
+        ])
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "publish order command should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output_json = String::from_utf8_lossy(&output.stdout);
+    let output_json: serde_json::Value = serde_json::from_str(&output_json).unwrap();
+
+    // b has a dev-dependency on a, but that should not affect publish order.
+    // both crates are independent and should appear in the same level.
+    assert_eq!(output_json.as_array().unwrap().len(), 1);
+    assert_eq!(output_json[0].as_array().unwrap().len(), 2);
+}
+
+#[test]
 #[ignore] // requires docker.
 fn test_publish_test() {
     let current_file_path_str = file!();
