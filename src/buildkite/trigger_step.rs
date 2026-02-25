@@ -60,5 +60,20 @@ mod tests {
                 }
             }"#,
         );
+
+        assert_serialized_json(
+            &TriggerStep {
+                name: String::from("Trigger Build on agave-secondary"),
+                trigger: String::from("agave-secondary"),
+                branches: vec![],
+                is_async: None,
+                soft_fail: None,
+                build: None,
+            },
+            r#"{
+                "name": "Trigger Build on agave-secondary",
+                "trigger": "agave-secondary"
+            }"#,
+        );
     }
 }

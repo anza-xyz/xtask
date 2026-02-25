@@ -80,4 +80,11 @@ mod tests {
             }"#,
         );
     }
+
+    #[test]
+    fn test_pipeline_default() {
+        let default_pipeline = Pipeline::default();
+        let empty_pipeline = Pipeline::new();
+        assert_eq!(default_pipeline, empty_pipeline);
+    }
 }
