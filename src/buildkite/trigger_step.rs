@@ -11,7 +11,7 @@ pub struct TriggerStep {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub branches: Vec<String>,
 
-    #[serde(rename = "async")]
+    #[serde(rename = "async", skip_serializing_if = "Option::is_none")]
     pub is_async: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
