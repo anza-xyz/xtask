@@ -25,6 +25,9 @@ pub struct CommandStep {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry: Option<HashMap<String, String>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub env: Option<HashMap<String, String>>,
 }
 
 #[cfg(test)]
@@ -61,6 +64,10 @@ mod tests {
                     String::from("automatic"),
                     String::from("true"),
                 )])),
+                env: Some(HashMap::from([(
+                    String::from("FETCH_COVERAGE_ENV"),
+                    String::from("true"),
+                )])),
                 ..Default::default()
             },
             r#"{
@@ -70,7 +77,8 @@ mod tests {
                 "soft_fail": false,
                 "agents": {"queue": "test"},
                 "timeout_in_minutes": 15,
-                "retry": {"automatic": "true"}
+                "retry": {"automatic": "true"},
+                "env": {"FETCH_COVERAGE_ENV": "true"}
             }"#,
         );
     }
