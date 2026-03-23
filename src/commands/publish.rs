@@ -307,6 +307,7 @@ fn start_docker_registry() -> Result<String> {
     let output = Command::new("docker")
         .args([
             "run",
+            "--rm",
             "-d",
             "--name",
             "kellnr",
