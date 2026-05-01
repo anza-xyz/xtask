@@ -1,0 +1,5 @@
+[workspace]
+members = ["a", "b"]
+
+[workspace.dependencies]
+a = { path = "a" }
