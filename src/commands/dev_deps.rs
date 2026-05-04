@@ -57,10 +57,7 @@ fn run_check(args: CheckArgs) -> Result<()> {
     // 2. Build map of package names -> member paths
     let mut package_to_member = HashMap::new();
     for member in members.iter() {
-        let member_path = member
-            .as_str()
-            .context("Member path is not a string")?
-            .to_string();
+        let member_path = member.as_str().context("Member path is not a string")?;
         let member_cargo_toml = workspace_root.join(&member_path).join("Cargo.toml");
 
         if !member_cargo_toml.exists() {
