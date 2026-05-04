@@ -95,22 +95,7 @@ fn run_check(args: CheckArgs) -> Result<()> {
         if let Some(dev_deps) = doc.get("dev-dependencies").and_then(|dd| dd.as_table()) {
             for (dep_name, dep_value) in dev_deps.iter() {
                 // Check if this dependency uses workspace = true
-                if let Some(table) = dep_value.as_inline_table() {
-                    if table
-                        .get("workspace")
-                        .and_then(|w| w.as_bool())
-                        .unwrap_or(false)
-                    {
-                        // Check if this is a workspace member
-                        if package_to_member.contains_key(dep_name) {
-                            warn!(
-                                "{}/Cargo.toml - `{}` in dev-dependencies should use path = \"...\"",
-                                member_path, dep_name
-                            );
-                            total_issues += 1;
-                        }
-                    }
-                } else if let Some(table) = dep_value.as_table() {
+                if let Some(table) = dep_value.as_table_like() {
                     if table
                         .get("workspace")
                         .and_then(|w| w.as_bool())
