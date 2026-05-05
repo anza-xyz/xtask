@@ -1,5 +1,5 @@
 [workspace]
-members = ["a", "b"]
+members = ["a", "b", "c"]
 
 [workspace.dependencies]
 serde = "1.0"

@@ -68,6 +68,12 @@ fn test_dev_deps_check_allows_external_workspace_deps() {
         .output()
         .unwrap();
 
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("c/Cargo.toml not found"),
+        "Should mention c not found, got {stderr}",
+    );
+
     // Should succeed because serde is not a workspace member
     assert!(
         output.status.success(),
