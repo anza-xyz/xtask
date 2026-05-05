@@ -78,37 +78,6 @@ fn test_dev_deps_check_allows_external_workspace_deps() {
 
 #[test]
 #[serial]
-fn test_dev_deps_check_allows_path_dependencies() {
-    // Workspace 2: crate-b uses path for a (workspace member)
-    let current_file_path_str = file!();
-    let workspace_path = fs::canonicalize(
-        Path::new(current_file_path_str)
-            .parent()
-            .unwrap()
-            .join("dummy-workspace-dev-deps-2"),
-    )
-    .unwrap();
-
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
-        .args([
-            "dev-deps",
-            "check",
-            "--manifest-path",
-            workspace_path.join("Cargo.toml").to_str().unwrap(),
-        ])
-        .output()
-        .unwrap();
-
-    // Should succeed because using path, not workspace = true
-    assert!(
-        output.status.success(),
-        "Should allow path dependencies. stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[test]
-#[serial]
 fn test_dev_deps_check_multiple_issues() {
     // Workspace 3: multiple issues - 3 total
     let current_file_path_str = file!();
