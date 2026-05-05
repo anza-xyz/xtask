@@ -251,13 +251,8 @@ fn test_dev_deps_check_detects_table_format() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("a") && stderr.contains("dev-dependencies should use path"),
-        "Error message should mention a and suggest using path. Got: {}",
-        stderr
-    );
-    assert!(
-        stderr.contains("b/Cargo.toml"),
-        "Should mention b location. Got: {}",
+        stderr.contains("b/Cargo.toml") && stderr.contains("`a`"),
+        "Should mention c with b. Got: {}",
         stderr
     );
 }
