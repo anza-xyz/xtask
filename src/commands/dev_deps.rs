@@ -1,7 +1,7 @@
 use {
     anyhow::{Context, Result},
     clap::Subcommand,
-    log::warn,
+    log::{warn, error},
     std::{
         collections::HashMap,
         fs,
@@ -61,6 +61,7 @@ fn run_check(args: CheckArgs) -> Result<()> {
         let member_cargo_toml = workspace_root.join(member_path).join("Cargo.toml");
 
         if !member_cargo_toml.exists() {
+            warn!("(Skipping) {member_path}/Cargo.toml not found");
             continue;
         }
 
@@ -100,7 +101,7 @@ fn run_check(args: CheckArgs) -> Result<()> {
                     {
                         // Check if this is a workspace member
                         if package_to_member.contains_key(dep_name) {
-                            warn!(
+                            error!(
                                 "{}/Cargo.toml - `{}` in dev-dependencies should use path = \"...\"",
                                 member_path, dep_name
                             );
