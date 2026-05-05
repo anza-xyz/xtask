@@ -1,7 +1,7 @@
 use {
     anyhow::{Context, Result},
     clap::Subcommand,
-    log::{warn, error},
+    log::{error, warn},
     std::{
         collections::HashMap,
         fs,
