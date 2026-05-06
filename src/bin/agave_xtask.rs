@@ -2,10 +2,11 @@ use {
     anyhow::Result,
     clap::{Args, Parser, Subcommand},
     log::error,
+    agave_xtask as xtask,
 };
 
 #[derive(Parser)]
-#[command(name = "xtask", about = "Build tasks", version)]
+#[command(name = "agave-xtask", about = "Build tasks", version)]
 struct Xtask {
     #[command(flatten)]
     pub global: GlobalOptions,
