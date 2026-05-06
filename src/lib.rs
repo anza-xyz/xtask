@@ -8,7 +8,7 @@
 //! ## Computing publish order
 //!
 //! ```no_run
-//! use xtask::commands::publish::compute_publish_order_data;
+//! use agave_xtask::commands::publish::compute_publish_order_data;
 //!
 //! let order = compute_publish_order_data("Cargo.toml").unwrap();
 //!
@@ -21,7 +21,7 @@
 //! ## Bumping version
 //!
 //! ```no_run
-//! use xtask::commands::bump_version::{bump_version, BumpLevel};
+//! use agave_xtask::commands::bump_version::{bump_version, BumpLevel};
 //! use semver::Version;
 //!
 //! let current = Version::parse("1.2.3").unwrap();
