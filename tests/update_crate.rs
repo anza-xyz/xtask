@@ -20,7 +20,7 @@ fn test_update_crate() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("agave_xtask")
         .args([
             "update-crate",
             "--root-path",
