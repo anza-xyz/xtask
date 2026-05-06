@@ -34,7 +34,7 @@ fn test_dev_deps_check_detects_workspace_true() {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("a") && stderr.contains("dev-dependencies should use path"),
+        stderr.contains("`a`") && stderr.contains("dev-dependencies should use path"),
         "Error message should mention a and suggest using path. Got: {}",
         stderr
     );
