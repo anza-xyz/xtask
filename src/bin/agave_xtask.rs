@@ -1,8 +1,8 @@
 use {
+    agave_xtask as xtask,
     anyhow::Result,
     clap::{Args, Parser, Subcommand},
     log::error,
-    agave_xtask as xtask,
 };
 
 #[derive(Parser)]
