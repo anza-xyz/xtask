@@ -1,6 +1,6 @@
 use {
-    anza_xtask as xtask,
     anyhow::Result,
+    anza_xtask as xtask,
     clap::{Args, Parser, Subcommand},
     log::error,
 };
