@@ -105,12 +105,6 @@ jobs:
           persist-credentials: false
           ref: ${{ needs.check.outputs.ref }}
 
-      - run: |
-          git tag -a "${TAG}" -m "Release ${TAG}"
-          git push origin "${TAG}"
-        env:
-          TAG: ${{ needs.check.outputs.tag }}
-
       - name: Package crate
         run: cargo package -p "${CRATE_NAME}"
         env:
@@ -129,6 +123,12 @@ jobs:
         env:
           CRATE_NAME: ${{ inputs.crate }}
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - run: |
+          git tag -a "${TAG}" -m "Release ${TAG}"
+          git push origin "${TAG}"
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
 
       - name: Create Github Release
         run: |
