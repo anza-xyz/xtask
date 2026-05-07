@@ -1,5 +1,5 @@
 [package]
-name = "agave-xtask"
+name = "anza-xtask"
 version = "0.1.0"
 authors = ["Anza Maintainers <maintainers@anza.xyz>"]
 description = "Blockchain, Rebuilt for Scale"

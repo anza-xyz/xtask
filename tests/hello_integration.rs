@@ -1,6 +1,6 @@
 #[test]
 fn test_hello() {
-    let output = assert_cmd::cargo::cargo_bin_cmd!("agave_xtask")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args(["hello", "--verbose"])
         .unwrap();
     assert!(
