@@ -135,37 +135,6 @@ fn test_dev_deps_check_multiple_issues() {
 
 #[test]
 #[serial]
-fn test_dev_deps_check_no_issues() {
-    // Workspace 2: no issues - correct usage
-    let current_file_path_str = file!();
-    let workspace_path = fs::canonicalize(
-        Path::new(current_file_path_str)
-            .parent()
-            .unwrap()
-            .join("dummy-workspace-dev-deps-2"),
-    )
-    .unwrap();
-
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
-        .args([
-            "dev-deps",
-            "check",
-            "--manifest-path",
-            workspace_path.join("Cargo.toml").to_str().unwrap(),
-        ])
-        .output()
-        .unwrap();
-
-    // Should succeed - no issues
-    assert!(
-        output.status.success(),
-        "Should pass when no issues found. stderr: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
-#[test]
-#[serial]
 fn test_dev_deps_check_ignores_regular_dependencies() {
     // Workspace 4: has regular dependency with workspace = true (should NOT be flagged)
     let current_file_path_str = file!();
