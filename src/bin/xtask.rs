@@ -24,6 +24,8 @@ enum Commands {
     UpdateCrate(xtask::commands::update_crate::CommandArgs),
     #[command(about = "Publish crates")]
     Publish(xtask::commands::publish::CommandArgs),
+    #[command(about = "Check dev-dependencies")]
+    DevDeps(xtask::commands::dev_deps::CommandArgs),
 }
 
 #[derive(Args, Debug)]
@@ -62,6 +64,9 @@ fn try_main() -> Result<()> {
         }
         Commands::Publish(args) => {
             xtask::commands::publish::run(args)?;
+        }
+        Commands::DevDeps(args) => {
+            xtask::commands::dev_deps::run(args)?;
         }
     }
 
