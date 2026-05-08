@@ -6,7 +6,7 @@ use {
 };
 
 #[derive(Parser)]
-#[command(name = "agave-xtask", about = "Build tasks", version)]
+#[command(name = "anza-xtask", about = "Build tasks", version)]
 struct Xtask {
     #[command(flatten)]
     pub global: GlobalOptions,

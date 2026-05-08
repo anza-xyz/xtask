@@ -9,7 +9,7 @@ on:
         type: choice
         options:
           - ""
-          - agave-xtask
+          - anza-xtask
       ref:
         description: "git ref to tag (can be a branch or a commit hash)"
         required: true
