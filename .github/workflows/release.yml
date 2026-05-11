@@ -8,7 +8,6 @@ on:
         required: true
         type: choice
         options:
-          - ""
           - anza-xtask
       ref:
         description: "git ref to tag (can be a branch or a commit hash)"
