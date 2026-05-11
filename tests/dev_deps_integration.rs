@@ -16,7 +16,7 @@ fn test_dev_deps_check_detects_workspace_true() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args([
             "dev-deps",
             "check",
@@ -58,7 +58,7 @@ fn test_dev_deps_check_allows_external_workspace_deps() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args([
             "dev-deps",
             "check",
@@ -95,7 +95,7 @@ fn test_dev_deps_check_multiple_issues() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args([
             "dev-deps",
             "check",
@@ -146,7 +146,7 @@ fn test_dev_deps_check_ignores_regular_dependencies() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args([
             "dev-deps",
             "check",
@@ -177,7 +177,7 @@ fn test_dev_deps_check_detects_table_format() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args([
             "dev-deps",
             "check",
