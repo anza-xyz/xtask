@@ -1,13 +1,12 @@
 [package]
-name = "xtask"
+name = "anza-xtask"
 version = "0.1.0"
 authors = ["Anza Maintainers <maintainers@anza.xyz>"]
 description = "Blockchain, Rebuilt for Scale"
-repository = "https://github.com/anza-xyz/agave"
+repository = "https://github.com/anza-xyz/xtask"
 homepage = "https://anza.xyz/"
 license = "Apache-2.0"
 edition = "2021"
-publish = false
 
 # Prevents auto-detection of parent workspace (ie. git worktrees).
 [workspace]

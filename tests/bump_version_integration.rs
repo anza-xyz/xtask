@@ -21,7 +21,7 @@ fn test_bump_version() {
     // git init is a hack for the bump version command to work
     Command::new("git").args(["init"]).output().unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!()
+    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
         .args(["bump-version", "patch"])
         .unwrap();
     assert!(

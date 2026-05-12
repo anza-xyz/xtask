@@ -1,11 +1,12 @@
 use {
     anyhow::Result,
+    anza_xtask as xtask,
     clap::{Args, Parser, Subcommand},
     log::error,
 };
 
 #[derive(Parser)]
-#[command(name = "xtask", about = "Build tasks", version)]
+#[command(name = "anza-xtask", about = "Build tasks", version)]
 struct Xtask {
     #[command(flatten)]
     pub global: GlobalOptions,
