@@ -1,7 +1,7 @@
 #[test]
 fn test_hello() {
-    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
-        .args(["hello", "--verbose"])
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
+        .args(["anza-xtask", "hello", "--verbose"])
         .unwrap();
     assert!(
         output.status.success(),

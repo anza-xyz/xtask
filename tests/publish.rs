@@ -11,8 +11,9 @@ fn test_publish_order() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
         .args([
+            "anza-xtask",
             "publish",
             "--manifest-path",
             workspace_path.join("Cargo.toml").to_str().unwrap(),
@@ -63,8 +64,9 @@ fn test_publish_order_ignores_dev_deps() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
         .args([
+            "anza-xtask",
             "publish",
             "--manifest-path",
             workspace_path.join("Cargo.toml").to_str().unwrap(),
@@ -99,8 +101,9 @@ fn test_publish_order_optional_deps() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
         .args([
+            "anza-xtask",
             "publish",
             "--manifest-path",
             workspace_path.join("Cargo.toml").to_str().unwrap(),
@@ -144,8 +147,9 @@ fn test_publish_test() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
         .args([
+            "anza-xtask",
             "publish",
             "--manifest-path",
             workspace_path.join("Cargo.toml").to_str().unwrap(),
