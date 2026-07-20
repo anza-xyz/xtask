@@ -20,8 +20,9 @@ fn test_update_crate() {
     )
     .unwrap();
 
-    let output = assert_cmd::cargo::cargo_bin_cmd!("anza_xtask")
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
         .args([
+            "anza-xtask",
             "update-crate",
             "--root-path",
             &root_path.display().to_string(),

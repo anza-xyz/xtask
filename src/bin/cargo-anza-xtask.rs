@@ -6,7 +6,13 @@ use {
 };
 
 #[derive(Parser)]
-#[command(name = "anza-xtask", about = "Build tasks", version)]
+#[command(name = "cargo-anza-xtask", bin_name = "cargo")]
+enum Cargo {
+    #[command(about = "Build tasks", version, display_name = "cargo-anza-xtask")]
+    AnzaXtask(Xtask),
+}
+
+#[derive(Args)]
 struct Xtask {
     #[command(flatten)]
     pub global: GlobalOptions,
@@ -46,7 +52,7 @@ fn main() {
 }
 
 fn try_main() -> Result<()> {
-    let xtask = Xtask::parse();
+    let Cargo::AnzaXtask(xtask) = Cargo::parse();
 
     if xtask.global.verbose {
         std::env::set_var("RUST_LOG", "debug");
