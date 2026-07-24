@@ -3,8 +3,13 @@ use {
     clap::{Args, ValueEnum},
     log::{debug, info},
     semver::Version,
-    std::{fs, process::Command},
-    toml_edit::{value, DocumentMut},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        fs,
+        path::Path,
+        process::Command,
+    },
+    toml_edit::{value, DocumentMut, Item, Table, Value},
 };
 
 #[derive(Args)]
@@ -56,6 +61,9 @@ pub fn run(args: CommandArgs) -> Result<()> {
             .parse::<DocumentMut>()
             .context(format!("failed to parse {}", cargo_toml.display()))?;
 
+        let original = doc.clone();
+        let mut intended: BTreeMap<String, (String, String)> = BTreeMap::new();
+
         if let Some(workspace_package_version_str) = doc
             .get("workspace")
             .and_then(|workspace| workspace.get("package"))
@@ -64,6 +72,10 @@ pub fn run(args: CommandArgs) -> Result<()> {
         {
             if workspace_package_version_str == current_version.to_string() {
                 doc["workspace"]["package"]["version"] = value(new_version.to_string());
+                intended.insert(
+                    "workspace.package.version".to_string(),
+                    (current_version.to_string(), new_version.to_string()),
+                );
                 info!("  bumped workspace.package.version from {current_version} to {new_version}",);
             }
         }
@@ -75,7 +87,11 @@ pub fn run(args: CommandArgs) -> Result<()> {
         {
             if package_version_str == current_version.to_string() {
                 doc["package"]["version"] = value(new_version.to_string());
-                info!("  bumped package.version from {current_version} to {current_version}",);
+                intended.insert(
+                    "package.version".to_string(),
+                    (current_version.to_string(), new_version.to_string()),
+                );
+                info!("  bumped package.version from {current_version} to {new_version}",);
             }
         }
 
@@ -98,17 +114,26 @@ pub fn run(args: CommandArgs) -> Result<()> {
                             continue;
                         }
                         let old_version = version.to_string();
-                        let new_version = old_version
+                        let bumped_version = old_version
                             .replace(&current_version.to_string(), &new_version.to_string());
-                        doc["workspace"]["dependencies"][&name]["version"] = value(&new_version);
+                        doc["workspace"]["dependencies"][&name]["version"] = value(&bumped_version);
+                        intended.insert(
+                            format!("workspace.dependencies.{name}.version"),
+                            (old_version.clone(), bumped_version.clone()),
+                        );
                         info!(
                             "  bumped workspace.dependencies.{name}.version from {old_version} to \
-                             {new_version}",
+                             {bumped_version}",
                         );
                     }
                 }
             }
         }
+
+        verify_changes(&original, &doc, &intended, &cargo_toml).context(format!(
+            "unexpected changes while bumping {}",
+            cargo_toml.display()
+        ))?;
 
         // write the updated document back to the file
         debug!("writing {}", cargo_toml.display());
@@ -137,6 +162,116 @@ pub fn run(args: CommandArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn verify_changes(
+    original: &DocumentMut,
+    modified: &DocumentMut,
+    intended: &BTreeMap<String, (String, String)>,
+    file: &Path,
+) -> Result<()> {
+    let before = flatten_leaves(original);
+    let after = flatten_leaves(modified);
+
+    let mut actual: BTreeMap<String, (String, String)> = BTreeMap::new();
+    let paths: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
+    for path in paths {
+        let old = before.get(path);
+        let new = after.get(path);
+        if old != new {
+            actual.insert(
+                path.clone(),
+                (
+                    old.cloned().unwrap_or_default(),
+                    new.cloned().unwrap_or_default(),
+                ),
+            );
+        }
+    }
+
+    if &actual == intended {
+        return Ok(());
+    }
+
+    let mut errors = vec![];
+    for (path, (old, new)) in &actual {
+        match intended.get(path) {
+            None => errors.push(format!(
+                "  unexpected change at `{path}`: {old:?} -> {new:?}"
+            )),
+            Some(expected) if expected != &(old.clone(), new.clone()) => errors.push(format!(
+                "  wrong change at `{path}`: expected {expected:?}, got {:?}",
+                (old, new)
+            )),
+            _ => {}
+        }
+    }
+    for path in intended.keys() {
+        if !actual.contains_key(path) {
+            errors.push(format!("  expected change at `{path}` did not happen"));
+        }
+    }
+
+    Err(anyhow!(
+        "version bump touched unexpected content in {}:\n{}",
+        file.display(),
+        errors.join("\n")
+    ))
+}
+
+fn flatten_leaves(doc: &DocumentMut) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    walk_table(doc.as_table(), String::new(), &mut out);
+    out
+}
+
+fn walk_table(table: &Table, prefix: String, out: &mut BTreeMap<String, String>) {
+    for (key, item) in table.iter() {
+        walk_item(item, join(&prefix, key), out);
+    }
+}
+
+fn walk_item(item: &Item, path: String, out: &mut BTreeMap<String, String>) {
+    match item {
+        Item::Value(v) => walk_value(v, path, out),
+        Item::Table(t) => walk_table(t, path, out),
+        Item::ArrayOfTables(arr) => {
+            for (i, t) in arr.iter().enumerate() {
+                walk_table(t, format!("{path}[{i}]"), out);
+            }
+        }
+        Item::None => {}
+    }
+}
+
+fn walk_value(v: &Value, path: String, out: &mut BTreeMap<String, String>) {
+    match v {
+        Value::InlineTable(t) => {
+            for (key, val) in t.iter() {
+                walk_value(val, join(&path, key), out);
+            }
+        }
+        Value::Array(arr) => {
+            for (i, val) in arr.iter().enumerate() {
+                walk_value(val, format!("{path}[{i}]"), out);
+            }
+        }
+        scalar => {
+            let repr = scalar
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| scalar.to_string().trim().to_string());
+            out.insert(path, repr);
+        }
+    }
+}
+
+fn join(prefix: &str, key: &str) -> String {
+    if prefix.is_empty() {
+        key.to_string()
+    } else {
+        format!("{prefix}.{key}")
+    }
 }
 
 pub fn bump_version(level: &BumpLevel, current: &Version) -> Result<Version> {
@@ -375,5 +510,73 @@ mod tests {
             .unwrap(),
             Version::parse("1.2.4").unwrap()
         );
+    }
+
+    fn doc(s: &str) -> DocumentMut {
+        s.parse().unwrap()
+    }
+
+    fn intent(pairs: &[(&str, &str, &str)]) -> BTreeMap<String, (String, String)> {
+        pairs
+            .iter()
+            .map(|(p, o, n)| (p.to_string(), (o.to_string(), n.to_string())))
+            .collect()
+    }
+
+    #[test]
+    fn test_verify_changes_ok() {
+        let original = doc("[package]\nname = \"foo\"\nversion = \"1.0.0\"\n");
+        let modified = doc("[package]\nname = \"foo\"\nversion = \"1.1.0\"\n");
+        let intended = intent(&[("package.version", "1.0.0", "1.1.0")]);
+        assert!(verify_changes(&original, &modified, &intended, Path::new("Cargo.toml")).is_ok());
+    }
+
+    #[test]
+    fn test_verify_changes_ignores_formatting() {
+        let original = doc("[package]\nname = \"foo\"\nversion = \"1.0.0\"\n");
+        let modified = doc("[package]\n# comment\nname   =   \"foo\"\nversion = \"1.0.0\"\n");
+        assert!(verify_changes(
+            &original,
+            &modified,
+            &BTreeMap::new(),
+            Path::new("Cargo.toml")
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_verify_changes_detects_stray_edit() {
+        let original = doc("[package]\nname = \"foo\"\nversion = \"1.0.0\"\n");
+        let modified = doc("[package]\nname = \"bar\"\nversion = \"1.1.0\"\n");
+        let intended = intent(&[("package.version", "1.0.0", "1.1.0")]);
+        let err = verify_changes(&original, &modified, &intended, Path::new("Cargo.toml"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("unexpected change at `package.name`"), "{err}");
+    }
+
+    #[test]
+    fn test_verify_changes_detects_skipped_bump() {
+        let original = doc("[package]\nversion = \"1.0.0\"\n");
+        let modified = original.clone();
+        let intended = intent(&[("package.version", "1.0.0", "1.1.0")]);
+        let err = verify_changes(&original, &modified, &intended, Path::new("Cargo.toml"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("expected change at `package.version` did not happen"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_verify_changes_detects_wrong_value() {
+        let original = doc("[package]\nversion = \"1.0.0\"\n");
+        let modified = doc("[package]\nversion = \"2.0.0\"\n");
+        let intended = intent(&[("package.version", "1.0.0", "1.1.0")]);
+        let err = verify_changes(&original, &modified, &intended, Path::new("Cargo.toml"))
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("wrong change at `package.version`"), "{err}");
     }
 }
