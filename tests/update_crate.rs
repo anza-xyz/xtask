@@ -51,9 +51,12 @@ fn test_update_crate() {
 
     // verify a/Cargo.toml
     let a_cargo_toml_content = fs::read_to_string(root_path.join("a/Cargo.toml")).unwrap();
-    assert!(
-        a_cargo_toml_content.contains(r#"solana-frozen-abi = { workspace = true }"#),
-        "a/Cargo.toml should not change"
+    assert_eq!(
+        a_cargo_toml_content
+            .matches(r#"solana-frozen-abi = { workspace = true }"#)
+            .count(),
+        2,
+        "workspace-inherited dependencies in a/Cargo.toml should not change"
     );
 
     // verify b/Cargo.toml
@@ -61,6 +64,10 @@ fn test_update_crate() {
     assert!(
         b_cargo_toml_content.contains(r#"solana-frozen-abi = "3.1.0""#),
         "b/Cargo.toml should be updated to 3.1.0"
+    );
+    assert!(
+        b_cargo_toml_content.contains("[dev-dependencies]\nsolana-frozen-abi = \"3.1.0\""),
+        "dev-dependencies in b/Cargo.toml should be updated to 3.1.0"
     );
 
     // verify c/Cargo.toml

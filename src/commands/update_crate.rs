@@ -65,6 +65,17 @@ pub fn run(args: CommandArgs) -> Result<()> {
             }
         }
 
+        if let Some(dev_deps) = doc
+            .get_mut("dev-dependencies")
+            .and_then(|deps| deps.as_table_mut())
+            .and_then(|deps| deps.get_mut(&args.package))
+        {
+            if update_dependency_spec(dev_deps, &args.from, &args.to) {
+                need_to_write = true;
+                info!("  ✅ updated dev-dependencies");
+            }
+        }
+
         if need_to_write {
             fs::write(&cargo_toml, doc.to_string())?;
         } else {
