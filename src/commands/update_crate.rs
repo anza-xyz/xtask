@@ -23,6 +23,11 @@ pub struct CommandArgs {
 
 pub fn run(args: CommandArgs) -> Result<()> {
     let all_cargo_tomls = utils::recursive_find_files(&args.root_path, "Cargo.toml", |_| true)?;
+    let dependency_targets: &[(&[&str], &str)] = &[
+        (&["workspace", "dependencies"], "workspace.dependencies"),
+        (&["dependencies"], "dependencies"),
+        (&["dev-dependencies"], "dev-dependencies"),
+    ];
 
     'MAIN_LOOP: for cargo_toml in all_cargo_tomls {
         info!("[{}]", cargo_toml.display());
@@ -41,38 +46,10 @@ pub fn run(args: CommandArgs) -> Result<()> {
         let mut doc = content.parse::<DocumentMut>()?;
         let mut need_to_write = false;
 
-        if let Some(workspace_deps) = doc
-            .get_mut("workspace")
-            .and_then(|ws| ws.as_table_mut())
-            .and_then(|ws| ws.get_mut("dependencies"))
-            .and_then(|deps| deps.as_table_mut())
-            .and_then(|deps| deps.get_mut(&args.package))
-        {
-            if update_dependency_spec(workspace_deps, &args.from, &args.to) {
+        for (path, label) in dependency_targets {
+            if update_dependency_at(&mut doc, path, &args.package, &args.from, &args.to) {
                 need_to_write = true;
-                info!("  ✅ updated workspace.dependencies");
-            }
-        }
-
-        if let Some(deps) = doc
-            .get_mut("dependencies")
-            .and_then(|deps| deps.as_table_mut())
-            .and_then(|deps| deps.get_mut(&args.package))
-        {
-            if update_dependency_spec(deps, &args.from, &args.to) {
-                need_to_write = true;
-                info!("  ✅ updated dependencies");
-            }
-        }
-
-        if let Some(dev_deps) = doc
-            .get_mut("dev-dependencies")
-            .and_then(|deps| deps.as_table_mut())
-            .and_then(|deps| deps.get_mut(&args.package))
-        {
-            if update_dependency_spec(dev_deps, &args.from, &args.to) {
-                need_to_write = true;
-                info!("  ✅ updated dev-dependencies");
+                info!("  ✅ updated {label}");
             }
         }
 
@@ -83,6 +60,27 @@ pub fn run(args: CommandArgs) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn update_dependency_at(
+    doc: &mut DocumentMut,
+    path: &[&str],
+    package: &str,
+    from: &str,
+    to: &str,
+) -> bool {
+    let mut table = doc.as_table_mut();
+
+    for key in path {
+        let Some(next_table) = table.get_mut(key).and_then(Item::as_table_mut) else {
+            return false;
+        };
+        table = next_table;
+    }
+
+    table
+        .get_mut(package)
+        .is_some_and(|dep_spec| update_dependency_spec(dep_spec, from, to))
 }
 
 fn update_dependency_spec(dep_spec: &mut Item, from: &str, to: &str) -> bool {
