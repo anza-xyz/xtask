@@ -150,6 +150,9 @@ pub fn run(args: CommandArgs) -> Result<()> {
             cargo_lock.display()
         ))?;
 
+        let before = fs::read_to_string(&cargo_lock)
+            .context(format!("failed to read {}", cargo_lock.display()))?;
+
         info!("running `cargo tree` in {}", dir.display());
         let output = Command::new("cargo")
             .arg("tree")
@@ -159,6 +162,22 @@ pub fn run(args: CommandArgs) -> Result<()> {
         if !output.status.success() {
             return Err(anyhow!("{}", String::from_utf8_lossy(&output.stderr)));
         }
+
+        let after = fs::read_to_string(&cargo_lock)
+            .context(format!("failed to read {}", cargo_lock.display()))?;
+
+        verify_lock_changes(
+            &before,
+            &after,
+            &all_crates,
+            &current_version,
+            &new_version,
+            &cargo_lock,
+        )
+        .context(format!(
+            "unexpected changes while bumping {}",
+            cargo_lock.display()
+        ))?;
     }
 
     Ok(())
@@ -217,6 +236,81 @@ fn verify_changes(
         file.display(),
         errors.join("\n")
     ))
+}
+
+fn verify_lock_changes(
+    before: &str,
+    after: &str,
+    all_crates: &[String],
+    current: &Version,
+    new: &Version,
+    file: &Path,
+) -> Result<()> {
+    let before_pkgs = parse_lock_packages(before)
+        .context(format!("failed to parse {} before bump", file.display()))?;
+    let after_pkgs = parse_lock_packages(after)
+        .context(format!("failed to parse {} after bump", file.display()))?;
+
+    let crates: BTreeSet<&str> = all_crates.iter().map(String::as_str).collect();
+    let current = current.to_string();
+    let new = new.to_string();
+
+    // The only allowed change: workspace crates locked at the old version move to
+    // the new version. Anything else (e.g. a transitive dep whose version jumps
+    // because of a flexible range) is an unexpected change.
+    let mut expected_removed: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut expected_added: BTreeSet<(String, String)> = BTreeSet::new();
+    for (name, version) in &before_pkgs {
+        if crates.contains(name.as_str()) && version == &current {
+            expected_removed.insert((name.clone(), current.clone()));
+            expected_added.insert((name.clone(), new.clone()));
+        }
+    }
+
+    let actual_removed: BTreeSet<(String, String)> =
+        before_pkgs.difference(&after_pkgs).cloned().collect();
+    let actual_added: BTreeSet<(String, String)> =
+        after_pkgs.difference(&before_pkgs).cloned().collect();
+
+    if actual_removed == expected_removed && actual_added == expected_added {
+        return Ok(());
+    }
+
+    let mut errors = vec![];
+    for (name, version) in actual_added.difference(&expected_added) {
+        errors.push(format!("  unexpected package `{name} {version}`"));
+    }
+    for (name, version) in actual_removed.difference(&expected_removed) {
+        errors.push(format!("  unexpectedly removed package `{name} {version}`"));
+    }
+    for (name, version) in expected_added.difference(&actual_added) {
+        errors.push(format!(
+            "  expected `{name}` to be bumped to `{version}` but it was not"
+        ));
+    }
+
+    Err(anyhow!(
+        "version bump touched unexpected content in {}:\n{}",
+        file.display(),
+        errors.join("\n")
+    ))
+}
+
+fn parse_lock_packages(content: &str) -> Result<BTreeSet<(String, String)>> {
+    let doc = content.parse::<DocumentMut>()?;
+
+    let mut packages = BTreeSet::new();
+    if let Some(Item::ArrayOfTables(entries)) = doc.get("package") {
+        for entry in entries.iter() {
+            let name = entry.get("name").and_then(Item::as_str);
+            let version = entry.get("version").and_then(Item::as_str);
+            if let (Some(name), Some(version)) = (name, version) {
+                packages.insert((name.to_string(), version.to_string()));
+            }
+        }
+    }
+
+    Ok(packages)
 }
 
 fn flatten_leaves(doc: &DocumentMut) -> BTreeMap<String, String> {
@@ -578,5 +672,109 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("wrong change at `package.version`"), "{err}");
+    }
+
+    fn lock(packages: &[(&str, &str)]) -> String {
+        let mut out = String::from("version = 3\n");
+        for (name, version) in packages {
+            out.push_str(&format!(
+                "\n[[package]]\nname = \"{name}\"\nversion = \"{version}\"\n"
+            ));
+        }
+        out
+    }
+
+    fn crates(names: &[&str]) -> Vec<String> {
+        names.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn test_verify_lock_changes_ok() {
+        let before = lock(&[("foo", "1.0.0"), ("serde", "1.0.150")]);
+        let after = lock(&[("foo", "1.1.0"), ("serde", "1.0.150")]);
+        assert!(verify_lock_changes(
+            &before,
+            &after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_verify_lock_changes_detects_transitive_jump() {
+        let before = lock(&[("foo", "1.0.0"), ("serde", "1.0.150")]);
+        let after = lock(&[("foo", "1.1.0"), ("serde", "1.0.200")]);
+        let err = verify_lock_changes(
+            &before,
+            &after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("unexpected package `serde 1.0.200`"), "{err}");
+        assert!(
+            err.contains("unexpectedly removed package `serde 1.0.150`"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_verify_lock_changes_detects_new_package() {
+        let before = lock(&[("foo", "1.0.0")]);
+        let after = lock(&[("foo", "1.1.0"), ("newdep", "0.1.0")]);
+        let err = verify_lock_changes(
+            &before,
+            &after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("unexpected package `newdep 0.1.0`"), "{err}");
+    }
+
+    #[test]
+    fn test_verify_lock_changes_detects_skipped_bump() {
+        let before = lock(&[("foo", "1.0.0")]);
+        let after = before.clone();
+        let err = verify_lock_changes(
+            &before,
+            &after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("expected `foo` to be bumped to `1.1.0` but it was not"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn test_verify_lock_changes_ignores_non_workspace_crate() {
+        // A crate that shares the old version string but isn't a workspace member
+        // must not be touched, and its presence must not be required to change.
+        let before = lock(&[("foo", "1.0.0"), ("other", "1.0.0")]);
+        let after = lock(&[("foo", "1.1.0"), ("other", "1.0.0")]);
+        assert!(verify_lock_changes(
+            &before,
+            &after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .is_ok());
     }
 }
