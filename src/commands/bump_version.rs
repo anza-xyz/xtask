@@ -255,38 +255,37 @@ fn verify_lock_changes(
     let current = current.to_string();
     let new = new.to_string();
 
-    // The only allowed change: workspace crates locked at the old version move to
-    // the new version. Anything else (e.g. a transitive dep whose version jumps
-    // because of a flexible range) is an unexpected change.
-    let mut expected_removed: BTreeSet<(String, String)> = BTreeSet::new();
-    let mut expected_added: BTreeSet<(String, String)> = BTreeSet::new();
-    for (name, version) in &before_pkgs {
-        if crates.contains(name.as_str()) && version == &current {
-            expected_removed.insert((name.clone(), current.clone()));
-            expected_added.insert((name.clone(), new.clone()));
-        }
+    // Rebuild the lock we expect: workspace crates move current -> new, every
+    // other package (source, checksum, dependency edges) stays identical.
+    let mut expected: BTreeMap<(String, String), String> = BTreeMap::new();
+    for ((name, version), body) in &before_pkgs {
+        let key = if crates.contains(name.as_str()) && version == &current {
+            (name.clone(), new.clone())
+        } else {
+            (name.clone(), version.clone())
+        };
+        expected.insert(key, body.clone());
     }
 
-    let actual_removed: BTreeSet<(String, String)> =
-        before_pkgs.difference(&after_pkgs).cloned().collect();
-    let actual_added: BTreeSet<(String, String)> =
-        after_pkgs.difference(&before_pkgs).cloned().collect();
-
-    if actual_removed == expected_removed && actual_added == expected_added {
+    if expected == after_pkgs {
         return Ok(());
     }
 
     let mut errors = vec![];
-    for (name, version) in actual_added.difference(&expected_added) {
-        errors.push(format!("  unexpected package `{name} {version}`"));
-    }
-    for (name, version) in actual_removed.difference(&expected_removed) {
-        errors.push(format!("  unexpectedly removed package `{name} {version}`"));
-    }
-    for (name, version) in expected_added.difference(&actual_added) {
-        errors.push(format!(
-            "  expected `{name}` to be bumped to `{version}` but it was not"
-        ));
+    let keys: BTreeSet<&(String, String)> = expected.keys().chain(after_pkgs.keys()).collect();
+    for key @ (name, version) in keys {
+        match (expected.get(key), after_pkgs.get(key)) {
+            (Some(want), Some(got)) if want != got => {
+                errors.push(format!("  unexpected change to package `{name} {version}`"));
+            }
+            (Some(_), None) => {
+                errors.push(format!("  missing package `{name} {version}` after bump"));
+            }
+            (None, Some(_)) => {
+                errors.push(format!("  unexpected package `{name} {version}`"));
+            }
+            _ => {}
+        }
     }
 
     Err(anyhow!(
@@ -296,17 +295,28 @@ fn verify_lock_changes(
     ))
 }
 
-fn parse_lock_packages(content: &str) -> Result<BTreeSet<(String, String)>> {
+fn parse_lock_packages(content: &str) -> Result<BTreeMap<(String, String), String>> {
     let doc = content.parse::<DocumentMut>()?;
 
-    let mut packages = BTreeSet::new();
+    let mut packages = BTreeMap::new();
     if let Some(Item::ArrayOfTables(entries)) = doc.get("package") {
         for entry in entries.iter() {
             let name = entry.get("name").and_then(Item::as_str);
             let version = entry.get("version").and_then(Item::as_str);
-            if let (Some(name), Some(version)) = (name, version) {
-                packages.insert((name.to_string(), version.to_string()));
+            let (Some(name), Some(version)) = (name, version) else {
+                continue;
+            };
+
+            let mut fields = vec![];
+            for (key, item) in entry.iter() {
+                if key == "name" || key == "version" {
+                    continue;
+                }
+                fields.push(format!("{key}={}", item.to_string().trim()));
             }
+            fields.sort();
+
+            packages.insert((name.to_string(), version.to_string()), fields.join("\n"));
         }
     }
 
@@ -719,7 +729,7 @@ mod tests {
         .to_string();
         assert!(err.contains("unexpected package `serde 1.0.200`"), "{err}");
         assert!(
-            err.contains("unexpectedly removed package `serde 1.0.150`"),
+            err.contains("missing package `serde 1.0.150` after bump"),
             "{err}"
         );
     }
@@ -756,7 +766,28 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(
-            err.contains("expected `foo` to be bumped to `1.1.0` but it was not"),
+            err.contains("missing package `foo 1.1.0` after bump"),
+            "{err}"
+        );
+        assert!(err.contains("unexpected package `foo 1.0.0`"), "{err}");
+    }
+
+    #[test]
+    fn test_verify_lock_changes_detects_moved_dependency_edge() {
+        let before = "version = 3\n\n[[package]]\nname = \"foo\"\nversion = \"1.0.0\"\n\n[[package]]\nname = \"tokio\"\nversion = \"1.52.3\"\ndependencies = [\"windows-sys 0.61.0\"]\n\n[[package]]\nname = \"windows-sys\"\nversion = \"0.45.0\"\n\n[[package]]\nname = \"windows-sys\"\nversion = \"0.61.0\"\n";
+        let after = "version = 3\n\n[[package]]\nname = \"foo\"\nversion = \"1.1.0\"\n\n[[package]]\nname = \"tokio\"\nversion = \"1.52.3\"\ndependencies = [\"windows-sys 0.45.0\"]\n\n[[package]]\nname = \"windows-sys\"\nversion = \"0.45.0\"\n\n[[package]]\nname = \"windows-sys\"\nversion = \"0.61.0\"\n";
+        let err = verify_lock_changes(
+            before,
+            after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains("unexpected change to package `tokio 1.52.3`"),
             "{err}"
         );
     }
