@@ -1,0 +1,21 @@
+# release-plz configuration — https://release-plz.dev/docs/config
+#
+# Versioning scheme (pre-1.0, strict Cargo SemVer — these are release-plz's
+# defaults, kept explicit here as the documented policy):
+#
+#   feat: / fix: / perf:   -> patch   (0.x.y -> 0.x.(y+1))
+#   breaking change        -> minor   (0.x.y -> 0.(x+1).0)
+#   chore:/ci:/docs:/etc.  -> no release
+#
+# In 0.x the minor slot IS the breaking slot, so no bump overrides are set.
+# Bump to 1.0.0 by hand once the public API is considered stable.
+
+[workspace]
+changelog_update = true
+git_release_enable = true
+semver_check = true
+
+# Match the tags cut by hand up to anza-xtask@v0.2.2; consumers pin against
+# these names, so release-plz's default (anza-xtask-v0.2.3) would break them.
+git_tag_name = "{{ package }}@v{{ version }}"
+git_release_name = "{{ package }}@v{{ version }}"
