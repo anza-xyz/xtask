@@ -1,84 +1,35 @@
 name: Release
 
+# Managed by release-plz (https://release-plz.dev).
+#
+# On every push to master:
+#   - `release-pr` keeps a standing "chore(release): ..." PR in sync with the
+#     conventional commits landed since the last release, bumping the version
+#     and updating CHANGELOG.md. Merging that PR is what cuts a release.
+#   - `release` detects the newly-merged version, tags it, creates a GitHub
+#     release, and publishes to crates.io via OIDC trusted publishing.
+#
+# The version bump policy lives in release-plz.toml.
+
 on:
-  workflow_dispatch:
-    inputs:
-      crate:
-        description: "Crate to release"
-        required: true
-        type: choice
-        options:
-          - anza-xtask
-      ref:
-        description: "git ref to tag (can be a branch or a commit hash)"
-        required: true
-        default: "master"
-        type: string
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    outputs:
-      tag: ${{ steps.meta.outputs.tag }}
-      ref: ${{ steps.meta.outputs.ref }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: ${{ inputs.ref }}
-          persist-credentials: false
-
-      - name: Compute metadata
-        id: meta
-        run: |
-          version="$(cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.name == "'"${CRATE_NAME}"'") | .version')"
-          if [ -z "${version}" ] || [ "${version}" = "null" ]; then
-            echo "Could not resolve version for crate: ${CRATE_NAME}"
-            exit 1
-          fi
-
-          tag="${CRATE_NAME}@v${version}"
-          ref="$(git rev-parse HEAD)"
-
-          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
-          echo "ref=${ref}" >> "${GITHUB_OUTPUT}"
-        env:
-          CRATE_NAME: ${{ inputs.crate }}
-
-      - name: Check tag does not exist
-        run: |
-          echo "checking: refs/tags/${TAG}"
-          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
-            echo "Tag already exists: ${TAG}. Please bump the version first (or delete the existing tag) and retry."
-            echo "Tag exists: ${TAG}" >> "${GITHUB_STEP_SUMMARY}"
-            exit 1
-          fi
-        env:
-          TAG: ${{ steps.meta.outputs.tag }}
-
-      - name: Cargo publish dry run
-        run: |
-          cargo publish -p "${CRATE_NAME}" --dry-run
-        env:
-          CRATE_NAME: ${{ inputs.crate }}
-
-      - name: Summary
-        run: |
-          echo "Tag: ${TAG}" >> "${GITHUB_STEP_SUMMARY}"
-          echo "Ref: ${REF} (https://github.com/${{ github.repository }}/commit/${REF})" >> "${GITHUB_STEP_SUMMARY}"
-        env:
-          TAG: ${{ steps.meta.outputs.tag }}
-          REF: ${{ steps.meta.outputs.ref }}
-
-  publish:
+  release-plz-release:
+    name: Release-plz release
     runs-on: ubuntu-latest
     environment: prod
-    needs: check
     permissions:
-      id-token: write
-      contents: write
-      attestations: write
-      artifact-metadata: write
+      contents: write # create tags and GitHub releases
+      pull-requests: read
+      id-token: write # crates.io trusted publishing (OIDC)
+    concurrency:
+      group: release-plz-release-${{ github.ref }}
+      cancel-in-progress: false
     steps:
       - name: Create github app token
         uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
@@ -87,51 +38,53 @@ jobs:
           client-id: ${{ vars.CLIENT_ID }}
           private-key: ${{ secrets.PRIVATE_KEY }}
 
-      - name: Set git config
-        run: |
-          git config --global user.email "${APP_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
-          git config --global user.name "${APP_SLUG}[bot]"
-          git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf https://github.com/
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          APP_ID: ${{ vars.APP_ID }}
-          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+
+  release-plz-pr:
+    name: Release-plz PR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the release branch
+      pull-requests: write # open and update the release PR
+    concurrency:
+      group: release-plz-pr-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Create github app token
+        uses: actions/create-github-app-token@1b10c78c7865c340bc4f6099eb2f838309f1e8c3 # v3.1.1
+        id: app-token
+        with:
+          client-id: ${{ vars.CLIENT_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
 
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
           persist-credentials: false
-          ref: ${{ needs.check.outputs.ref }}
 
-      - name: Package crate
-        run: cargo package -p "${CRATE_NAME}"
-        env:
-          CRATE_NAME: ${{ inputs.crate }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Generate SLSA provenance
-        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4.1.0
+      - name: Run release-plz
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
         with:
-          subject-path: target/package/*.crate
-
-      - name: Create crate token
-        uses: rust-lang/crates-io-auth-action@bbd81622f20ce9e2dd9622e3218b975523e45bbe # v1.0.4
-        id: auth
-
-      - run: cargo publish -p "${CRATE_NAME}"
+          command: release-pr
         env:
-          CRATE_NAME: ${{ inputs.crate }}
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-
-      - run: |
-          git tag -a "${TAG}" -m "Release ${TAG}"
-          git push origin "${TAG}"
-        env:
-          TAG: ${{ needs.check.outputs.tag }}
-
-      - name: Create Github Release
-        run: |
-          gh release create "${TAG}" --title "${TAG}" --generate-notes
-        env:
-          TAG: ${{ needs.check.outputs.tag }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
