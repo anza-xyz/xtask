@@ -5,3 +5,6 @@ edition = { workspace = true }
 
 [dependencies]
 solana-frozen-abi = "3.0.0"
+
+[dev-dependencies]
+solana-frozen-abi = "3.0.0"
