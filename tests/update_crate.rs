@@ -7,10 +7,6 @@ use {
 #[test]
 #[serial]
 fn test_update_crate() {
-    defer! {
-        Command::new("git").args(["checkout", "."]).output().unwrap();
-    }
-
     let current_file_path_str = file!();
     let root_path = fs::canonicalize(
         Path::new(current_file_path_str)
@@ -19,6 +15,10 @@ fn test_update_crate() {
             .join("dummy-workspace-crates-update"),
     )
     .unwrap();
+
+    defer! {
+        Command::new("git").args(["checkout", &root_path.display().to_string()]).output().unwrap();
+    }
 
     let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
         .args([
