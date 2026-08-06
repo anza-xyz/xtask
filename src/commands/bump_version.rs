@@ -20,9 +20,9 @@ pub struct CommandArgs {
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum BumpLevel {
-    #[value(help = "Bump major: x.y.z -> x+1.0.0")]
+    #[value(help = "Bump major: x.y.z -> x+1.0.0-alpha.0")]
     Major,
-    #[value(help = "Bump minor: x.y.z -> x.y+1.0")]
+    #[value(help = "Bump minor: x.y.z -> x.y+1.0-alpha.0")]
     Minor,
     #[value(help = "Bump patch: x.y.z -> x.y.z+1")]
     Patch,
@@ -385,10 +385,12 @@ pub fn bump_version(level: &BumpLevel, current: &Version) -> Result<Version> {
             new_version.major = new_version.major.saturating_add(1);
             new_version.minor = 0;
             new_version.patch = 0;
+            new_version.pre = semver::Prerelease::new("alpha.0").unwrap();
         }
         BumpLevel::Minor => {
             new_version.minor = new_version.minor.saturating_add(1);
             new_version.patch = 0;
+            new_version.pre = semver::Prerelease::new("alpha.0").unwrap();
         }
         BumpLevel::Patch => {
             new_version.patch = new_version.patch.saturating_add(1);
@@ -447,29 +449,39 @@ mod tests {
     fn test_bump_version_major() {
         assert_eq!(
             bump_version(&BumpLevel::Major, &Version::parse("1.0.0").unwrap()).unwrap(),
-            Version::parse("2.0.0").unwrap()
+            Version::parse("2.0.0-alpha.0").unwrap()
         );
 
         assert_eq!(
             bump_version(&BumpLevel::Major, &Version::parse("1.1.0").unwrap()).unwrap(),
-            Version::parse("2.0.0").unwrap()
+            Version::parse("2.0.0-alpha.0").unwrap()
         );
 
         assert_eq!(
             bump_version(&BumpLevel::Major, &Version::parse("1.1.1").unwrap()).unwrap(),
-            Version::parse("2.0.0").unwrap()
+            Version::parse("2.0.0-alpha.0").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(&BumpLevel::Major, &Version::parse("4.4.0-beta.3").unwrap()).unwrap(),
+            Version::parse("5.0.0-alpha.0").unwrap()
         );
     }
     #[test]
     fn test_bump_version_minor() {
         assert_eq!(
             bump_version(&BumpLevel::Minor, &Version::parse("1.0.0").unwrap()).unwrap(),
-            Version::parse("1.1.0").unwrap()
+            Version::parse("1.1.0-alpha.0").unwrap()
         );
 
         assert_eq!(
             bump_version(&BumpLevel::Minor, &Version::parse("1.2.1").unwrap()).unwrap(),
-            Version::parse("1.3.0").unwrap()
+            Version::parse("1.3.0-alpha.0").unwrap()
+        );
+
+        assert_eq!(
+            bump_version(&BumpLevel::Minor, &Version::parse("4.3.0-alpha.3").unwrap()).unwrap(),
+            Version::parse("4.4.0-alpha.0").unwrap()
         );
     }
 
