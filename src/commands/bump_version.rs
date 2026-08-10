@@ -110,12 +110,14 @@ pub fn run(args: CommandArgs) -> Result<()> {
                         .and_then(|v| v.get("version"))
                         .and_then(|v| v.as_str())
                     {
-                        if !version.contains(&current_version.to_string()) {
-                            continue;
-                        }
                         let old_version = version.to_string();
-                        let bumped_version = old_version
-                            .replace(&current_version.to_string(), &new_version.to_string());
+                        let Some(bumped_version) = bumped_requirement(
+                            &old_version,
+                            &current_version.to_string(),
+                            &new_version.to_string(),
+                        ) else {
+                            continue;
+                        };
                         doc["workspace"]["dependencies"][&name]["version"] = value(&bumped_version);
                         intended.insert(
                             format!("workspace.dependencies.{name}.version"),
@@ -181,6 +183,21 @@ pub fn run(args: CommandArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Bumps a dependency requirement only when it pins `current` itself, matching
+/// the version after any comparison operator.
+///
+/// Substring matching rewrote `=12.0.1` on a bump of `2.0.1`, leaving a pin to a
+/// version the crate never publishes.
+fn bumped_requirement(requirement: &str, current: &str, new: &str) -> Option<String> {
+    let version = requirement.trim_start_matches(['=', '^', '~', '>', '<', ' ']);
+    if version != current {
+        return None;
+    }
+    let operator = requirement.strip_suffix(version)?;
+
+    Some(format!("{operator}{new}"))
 }
 
 fn verify_changes(
@@ -819,5 +836,40 @@ mod tests {
             Path::new("Cargo.lock"),
         )
         .is_ok());
+    }
+
+    #[test]
+    fn test_bumped_requirement_pins_current() {
+        assert_eq!(
+            bumped_requirement("=1.2.3", "1.2.3", "1.2.4"),
+            Some("=1.2.4".to_string())
+        );
+        assert_eq!(
+            bumped_requirement("1.2.3", "1.2.3", "1.2.4"),
+            Some("1.2.4".to_string())
+        );
+        assert_eq!(
+            bumped_requirement("^1.2.3", "1.2.3", "1.2.4"),
+            Some("^1.2.4".to_string())
+        );
+        assert_eq!(
+            bumped_requirement("~1.2.3", "1.2.3", "1.2.4"),
+            Some("~1.2.4".to_string())
+        );
+        assert_eq!(
+            bumped_requirement(">=1.2.3", "1.2.3", "1.2.4"),
+            Some(">=1.2.4".to_string())
+        );
+    }
+
+    #[test]
+    fn test_bumped_requirement_leaves_other_versions_alone() {
+        // "12.0.1" contains "2.0.1", so substring matching used to rewrite this
+        // into a pin the crate never publishes.
+        assert_eq!(bumped_requirement("=12.0.1", "2.0.1", "2.0.2"), None);
+        assert_eq!(bumped_requirement("=1.2.30", "1.2.3", "1.2.4"), None);
+        assert_eq!(bumped_requirement("=2.0.0", "1.2.3", "1.2.4"), None);
+        // A range is not a pin.
+        assert_eq!(bumped_requirement(">=1.2.3, <2", "1.2.3", "1.2.4"), None);
     }
 }
