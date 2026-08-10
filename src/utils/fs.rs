@@ -63,13 +63,18 @@ pub fn find_all_cargo_locks() -> Result<Vec<PathBuf>> {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, pretty_assertions::assert_eq, serial_test::serial, std::collections::HashSet};
+    use {
+        super::*, pretty_assertions::assert_eq, scopeguard::defer, serial_test::serial,
+        std::collections::HashSet,
+    };
 
     #[test]
     #[serial]
     fn test_find_cargo_files() {
         let root_dir = tempfile::tempdir().unwrap();
         let root_dir_path = root_dir.path();
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
         std::env::set_current_dir(root_dir_path).unwrap();
         std::process::Command::new("git")
             .args(["init"])

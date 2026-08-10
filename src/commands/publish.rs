@@ -488,12 +488,22 @@ fn update_workspace_manifest_registry(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, serial_test::serial};
+
+    /// Fixture paths are absolute: other tests move the process working
+    /// directory into a tempdir, so a relative path here would not resolve.
+    fn fixture(relative: &str) -> String {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(relative)
+            .to_string_lossy()
+            .to_string()
+    }
 
     #[test]
+    #[serial]
     fn test_dependencies_are_in_earlier_levels() {
-        let manifest = "tests/dummy-workspace-publish-test/Cargo.toml";
-        let result = compute_publish_order_data(manifest);
+        let manifest = fixture("tests/dummy-workspace-publish-test/Cargo.toml");
+        let result = compute_publish_order_data(&manifest);
         assert!(result.is_ok(), "Should successfully compute order");
         let data = result.unwrap();
 
@@ -524,22 +534,25 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_publish_order_json_output() {
-        let manifest = "tests/dummy-workspace/Cargo.toml";
-        let result = publish_order_json(manifest);
+        let manifest = fixture("tests/dummy-workspace/Cargo.toml");
+        let result = publish_order_json(&manifest);
         assert!(result.is_ok(), "JSON output should succeed");
     }
 
     #[test]
+    #[serial]
     fn test_invalid_manifest_path() {
         let result = compute_publish_order_data("nonexistent/Cargo.toml");
         assert!(result.is_err(), "Should fail with invalid manifest path");
     }
 
     #[test]
+    #[serial]
     fn test_run_with_json_format() {
         let args = CommandArgs {
-            manifest_path: "tests/dummy-workspace/Cargo.toml".to_string(),
+            manifest_path: fixture("tests/dummy-workspace/Cargo.toml"),
             subcommand: PublishSubcommand::Order {
                 format: OutputFormat::Json,
             },
@@ -549,9 +562,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_run_with_tree_format() {
         let args = CommandArgs {
-            manifest_path: "tests/dummy-workspace/Cargo.toml".to_string(),
+            manifest_path: fixture("tests/dummy-workspace/Cargo.toml"),
             subcommand: PublishSubcommand::Order {
                 format: OutputFormat::Tree,
             },
@@ -561,9 +575,10 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_publish_excluded_packages() {
-        let manifest = "tests/dummy-workspace-publish-excluded/Cargo.toml";
-        let result = compute_publish_order_data(manifest);
+        let manifest = fixture("tests/dummy-workspace-publish-excluded/Cargo.toml");
+        let result = compute_publish_order_data(&manifest);
         assert!(result.is_ok());
         let data = result.unwrap();
 
@@ -584,12 +599,13 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_publish_order_exact_levels() {
         // dummy-workspace-publish-test has: a (no deps), b (depends on a),
         // c (depends on b), d (depends on a and c)
         // expected levels: 0=[a], 1=[b], 2=[c], 3=[d]
-        let manifest = "tests/dummy-workspace-publish-test/Cargo.toml";
-        let result = compute_publish_order_data(manifest);
+        let manifest = fixture("tests/dummy-workspace-publish-test/Cargo.toml");
+        let result = compute_publish_order_data(&manifest);
         assert!(result.is_ok());
         let data = result.unwrap();
 
@@ -612,10 +628,11 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_publish_order_tree_with_dependencies() {
         // uses a workspace with inter-dependencies to exercise the dependency display path
-        let manifest = "tests/dummy-workspace-publish-test/Cargo.toml";
-        let result = publish_order_tree(manifest);
+        let manifest = fixture("tests/dummy-workspace-publish-test/Cargo.toml");
+        let result = publish_order_tree(&manifest);
         assert!(
             result.is_ok(),
             "Tree output with dependencies should succeed"
@@ -623,6 +640,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_update_workspace_manifest_registry() {
         use std::sync::RwLock;
         use tempfile::NamedTempFile;

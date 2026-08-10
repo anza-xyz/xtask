@@ -14,13 +14,15 @@ pub fn get_git_root_path() -> Result<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use {super::*, pretty_assertions::assert_eq, serial_test::serial, std::fs};
+    use {super::*, pretty_assertions::assert_eq, scopeguard::defer, serial_test::serial, std::fs};
 
     #[test]
     #[serial]
     fn test_get_git_root_path() {
         let temp_dir = tempfile::tempdir().unwrap();
 
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
         std::env::set_current_dir(temp_dir.path()).unwrap();
         Command::new("git").args(["init"]).output().unwrap();
 
