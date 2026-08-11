@@ -443,6 +443,7 @@ fn publish_package_with_docker(package_name: String, package_path: &Path) -> Res
             "--registry",
             "kellnr",
             "--allow-dirty",
+            "--no-verify",
         ])
         .current_dir(&git_root)
         .env("EXTRA_DOCKER_RUN_ARGS", "--network container:kellnr")
