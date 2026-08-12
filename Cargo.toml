@@ -1,6 +1,6 @@
 [package]
 name = "anza-xtask"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Anza Maintainers <maintainers@anza.xyz>"]
 description = "Blockchain, Rebuilt for Scale"
 repository = "https://github.com/anza-xyz/xtask"
