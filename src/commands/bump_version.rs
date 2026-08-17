@@ -167,7 +167,7 @@ pub fn run(args: CommandArgs) -> Result<()> {
         verify_lock_changes(
             &before,
             &after,
-            &all_crates,
+            &all_crates.iter().cloned().collect(),
             &current_version,
             &new_version,
             &cargo_lock,
