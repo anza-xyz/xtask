@@ -4,7 +4,11 @@ use {
     clap::{Args, ValueEnum},
     log::{debug, info},
     semver::Version,
-    std::{collections::BTreeMap, fs, process::Command},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        fs,
+        process::Command,
+    },
     toml_edit::{value, DocumentMut},
 };
 
@@ -139,6 +143,8 @@ pub fn run(args: CommandArgs) -> Result<()> {
             .context(format!("failed to write {}", cargo_toml.display()))?;
     }
 
+    let crate_names: BTreeSet<String> = all_crates.iter().cloned().collect();
+
     let all_cargo_locks =
         crate::utils::find_all_cargo_locks().context("failed to find all Cargo.lock files")?;
     info!("found {} Cargo.lock files", all_cargo_locks.len());
@@ -167,7 +173,7 @@ pub fn run(args: CommandArgs) -> Result<()> {
         verify_lock_changes(
             &before,
             &after,
-            &all_crates,
+            &crate_names,
             &current_version,
             &new_version,
             &cargo_lock,

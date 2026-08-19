@@ -84,7 +84,7 @@ pub fn verify_changes(
 pub fn verify_lock_changes(
     before: &str,
     after: &str,
-    all_crates: &[String],
+    members: &BTreeSet<String>,
     current: &Version,
     new: &Version,
     file: &Path,
@@ -94,7 +94,6 @@ pub fn verify_lock_changes(
     let after_pkgs = parse_lock_packages(after)
         .context(format!("failed to parse {} after bump", file.display()))?;
 
-    let crates: BTreeSet<&str> = all_crates.iter().map(String::as_str).collect();
     let current = current.to_string();
     let new = new.to_string();
 
@@ -102,7 +101,7 @@ pub fn verify_lock_changes(
     // other package (source, checksum, dependency edges) stays identical.
     let mut expected: BTreeMap<(String, String), String> = BTreeMap::new();
     for ((name, version), body) in &before_pkgs {
-        let key = if crates.contains(name.as_str()) && version == &current {
+        let key = if members.contains(name) && version == &current {
             (name.clone(), new.clone())
         } else {
             (name.clone(), version.clone())
@@ -303,7 +302,7 @@ mod tests {
         out
     }
 
-    fn crates(names: &[&str]) -> Vec<String> {
+    fn crates(names: &[&str]) -> BTreeSet<String> {
         names.iter().map(|s| s.to_string()).collect()
     }
 
