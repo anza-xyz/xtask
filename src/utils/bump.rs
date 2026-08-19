@@ -2,6 +2,7 @@
 //! those.
 
 use {
+    super::cargo::WorkspaceMembers,
     anyhow::{anyhow, Context, Result},
     semver::Version,
     std::{
@@ -10,6 +11,85 @@ use {
     },
     toml_edit::{DocumentMut, Item, Table, Value},
 };
+
+/// Every version field in `doc` that a bump from `current` to `new` may change,
+/// keyed by the dotted leaf path `flatten_leaves` produces.
+pub fn bump_targets(
+    manifest: &Path,
+    doc: &DocumentMut,
+    members: &WorkspaceMembers,
+    current: &Version,
+    new: &Version,
+) -> BTreeMap<String, (String, String)> {
+    let current = current.to_string();
+    let new = new.to_string();
+    let mut targets = BTreeMap::new();
+
+    let is_root = members.is_root(manifest);
+
+    if is_root {
+        targets.extend(exact_version_target(
+            doc,
+            &["workspace", "package", "version"],
+            &current,
+            &new,
+        ));
+    }
+
+    if members.contains_manifest(manifest) {
+        targets.extend(exact_version_target(
+            doc,
+            &["package", "version"],
+            &current,
+            &new,
+        ));
+    }
+
+    if is_root {
+        if let Some(dependencies) = doc
+            .get("workspace")
+            .and_then(|workspace| workspace.get("dependencies"))
+            .and_then(|dependencies| dependencies.as_table())
+        {
+            for (name, dependency) in dependencies.iter() {
+                // A third-party dep can share a version string with the
+                // workspace, so only in-workspace crates are in scope.
+                if !members.contains_name(name) {
+                    continue;
+                }
+
+                let Some(requirement) = dependency.get("version").and_then(|v| v.as_str()) else {
+                    continue;
+                };
+                let Some(bumped) = bumped_requirement(requirement, &current, &new) else {
+                    continue;
+                };
+
+                targets.insert(
+                    format!("workspace.dependencies.{name}.version"),
+                    (requirement.to_string(), bumped),
+                );
+            }
+        }
+    }
+
+    targets
+}
+
+fn exact_version_target(
+    doc: &DocumentMut,
+    path: &[&str],
+    current: &str,
+    new: &str,
+) -> Option<(String, (String, String))> {
+    let (first, rest) = path.split_first()?;
+    let mut item = doc.get(first)?;
+    for key in rest {
+        item = item.get(key)?;
+    }
+
+    (item.as_str()? == current).then(|| (path.join("."), (current.to_string(), new.to_string())))
+}
 
 /// Bumps a dependency requirement only when it pins `current` itself, matching
 /// the version after any comparison operator.
@@ -222,7 +302,7 @@ fn join(prefix: &str, key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, std::path::PathBuf};
 
     fn doc(s: &str) -> DocumentMut {
         s.parse().unwrap()
@@ -233,6 +313,109 @@ mod tests {
             .iter()
             .map(|(p, o, n)| (p.to_string(), (o.to_string(), n.to_string())))
             .collect()
+    }
+
+    fn workspace_members(names: &[&str], manifests: &[&str], roots: &[&str]) -> WorkspaceMembers {
+        let paths = |paths: &[&str]| paths.iter().map(PathBuf::from).collect::<BTreeSet<_>>();
+
+        WorkspaceMembers {
+            names: names.iter().map(|s| s.to_string()).collect(),
+            manifests: paths(manifests),
+            roots: paths(roots),
+        }
+    }
+
+    fn versions() -> (Version, Version) {
+        (
+            Version::parse("1.2.3").unwrap(),
+            Version::parse("1.2.4").unwrap(),
+        )
+    }
+
+    #[test]
+    fn test_bump_targets_workspace_root() {
+        let manifest = Path::new("/repo/Cargo.toml");
+        let doc = doc(concat!(
+            "[workspace]\n",
+            "members = [\"a\"]\n\n",
+            "[workspace.package]\n",
+            "version = \"1.2.3\"\n\n",
+            "[workspace.dependencies]\n",
+            "a = { path = \"a\", version = \"=1.2.3\" }\n",
+            "byte-slice-cast = \"=1.2.3\"\n",
+        ));
+        let members = workspace_members(&["a"], &["/repo/a/Cargo.toml"], &["/repo/Cargo.toml"]);
+        let (current, new) = versions();
+
+        // The third-party dep shares the version string but is not a member.
+        assert_eq!(
+            bump_targets(manifest, &doc, &members, &current, &new),
+            intent(&[
+                ("workspace.package.version", "1.2.3", "1.2.4"),
+                ("workspace.dependencies.a.version", "=1.2.3", "=1.2.4"),
+            ])
+        );
+    }
+
+    #[test]
+    fn test_bump_targets_leaves_unrelated_pins_alone() {
+        let manifest = Path::new("/repo/Cargo.toml");
+        let doc = doc(concat!(
+            "[workspace.dependencies]\n",
+            "a = { path = \"a\", version = \"=2.0.1\" }\n",
+            "b = { path = \"b\", version = \"=12.0.1\" }\n",
+        ));
+        let members = workspace_members(&["a", "b"], &[], &["/repo/Cargo.toml"]);
+        let current = Version::parse("2.0.1").unwrap();
+        let new = Version::parse("2.0.2").unwrap();
+
+        assert_eq!(
+            bump_targets(manifest, &doc, &members, &current, &new),
+            intent(&[("workspace.dependencies.a.version", "=2.0.1", "=2.0.2")])
+        );
+    }
+
+    #[test]
+    fn test_bump_targets_member_package() {
+        let manifest = Path::new("/repo/d/Cargo.toml");
+        let doc = doc("[package]\nname = \"d\"\nversion = \"1.2.3\"\n");
+        let members = workspace_members(&["d"], &["/repo/d/Cargo.toml"], &["/repo/Cargo.toml"]);
+        let (current, new) = versions();
+
+        assert_eq!(
+            bump_targets(manifest, &doc, &members, &current, &new),
+            intent(&[("package.version", "1.2.3", "1.2.4")])
+        );
+    }
+
+    #[test]
+    fn test_bump_targets_skips_inherited_version() {
+        let manifest = Path::new("/repo/a/Cargo.toml");
+        let doc = doc("[package]\nname = \"a\"\nversion = { workspace = true }\n");
+        let members = workspace_members(&["a"], &["/repo/a/Cargo.toml"], &["/repo/Cargo.toml"]);
+        let (current, new) = versions();
+
+        assert!(bump_targets(manifest, &doc, &members, &current, &new).is_empty());
+    }
+
+    #[test]
+    fn test_bump_targets_skips_unclaimed_manifest() {
+        let manifest = Path::new("/repo/stray/Cargo.toml");
+        let doc = doc("[package]\nname = \"stray\"\nversion = \"1.2.3\"\n");
+        let members = workspace_members(&["a"], &["/repo/a/Cargo.toml"], &["/repo/Cargo.toml"]);
+        let (current, new) = versions();
+
+        assert!(bump_targets(manifest, &doc, &members, &current, &new).is_empty());
+    }
+
+    #[test]
+    fn test_bump_targets_skips_workspace_fields_of_non_root() {
+        let manifest = Path::new("/repo/a/Cargo.toml");
+        let doc = doc("[workspace.package]\nversion = \"1.2.3\"\n");
+        let members = workspace_members(&["a"], &["/repo/a/Cargo.toml"], &["/repo/Cargo.toml"]);
+        let (current, new) = versions();
+
+        assert!(bump_targets(manifest, &doc, &members, &current, &new).is_empty());
     }
 
     #[test]
