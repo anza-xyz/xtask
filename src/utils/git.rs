@@ -12,7 +12,15 @@ pub fn get_git_root_path() -> Result<PathBuf> {
         .args(["rev-parse", "--show-toplevel"])
         .output()
         .map_err(|e| anyhow!("failed to get git root path, error: {e}"))?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "failed to get git root path: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
     let root = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
     Ok(PathBuf::from(root))
 }
 
@@ -99,6 +107,19 @@ mod tests {
         let canonicalized_temp_dir_path = fs::canonicalize(temp_dir.path()).unwrap();
 
         assert_eq!(canonicalized_root_path, canonicalized_temp_dir_path);
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_git_root_path_outside_repo() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+        std::env::set_current_dir(temp_dir.path()).unwrap();
+
+        let err = get_git_root_path().unwrap_err().to_string();
+        assert!(err.contains("not a git repository"), "{err}");
     }
 
     /// Repository with a single commit adding `kept.txt`, `dir/nested.txt` and a
