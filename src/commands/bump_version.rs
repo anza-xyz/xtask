@@ -4,11 +4,7 @@ use {
     clap::{Args, ValueEnum},
     log::{debug, info},
     semver::Version,
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        fs,
-        process::Command,
-    },
+    std::{collections::BTreeMap, fs, process::Command},
     toml_edit::{value, DocumentMut},
 };
 
@@ -143,8 +139,6 @@ pub fn run(args: CommandArgs) -> Result<()> {
             .context(format!("failed to write {}", cargo_toml.display()))?;
     }
 
-    let crate_names: BTreeSet<String> = all_crates.iter().cloned().collect();
-
     let all_cargo_locks =
         crate::utils::find_all_cargo_locks().context("failed to find all Cargo.lock files")?;
     info!("found {} Cargo.lock files", all_cargo_locks.len());
@@ -153,6 +147,8 @@ pub fn run(args: CommandArgs) -> Result<()> {
             "failed to get {}'s parent directory",
             cargo_lock.display()
         ))?;
+
+        let crate_names = crate::utils::cargo::lock_member_names(&cargo_lock)?;
 
         let before = fs::read_to_string(&cargo_lock)
             .context(format!("failed to read {}", cargo_lock.display()))?;
