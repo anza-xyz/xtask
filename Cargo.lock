@@ -110,7 +110,6 @@ dependencies = [
  "serial_test",
  "tempfile",
  "toml_edit",
- "walkdir",
 ]
 
 [[package]]

@@ -22,7 +22,7 @@ pub struct CommandArgs {
 }
 
 pub fn run(args: CommandArgs) -> Result<()> {
-    let all_cargo_tomls = utils::recursive_find_files(&args.root_path, "Cargo.toml", |_| true)?;
+    let all_cargo_tomls = utils::find_files_by_name(&args.root_path, "Cargo.toml")?;
     let dependency_targets: &[(&[&str], &str)] = &[
         (&["workspace", "dependencies"], "workspace.dependencies"),
         (&["dependencies"], "dependencies"),
