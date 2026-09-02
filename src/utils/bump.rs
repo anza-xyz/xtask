@@ -177,16 +177,17 @@ pub fn verify_lock_changes(
     let current = current.to_string();
     let new = new.to_string();
 
-    // Rebuild the lock we expect: workspace crates move current -> new, every
-    // other package (source, checksum, dependency edges) stays identical.
-    let mut expected: BTreeMap<(String, String), String> = BTreeMap::new();
-    for ((name, version), body) in &before_pkgs {
-        let key = if members.contains(name) && version == &current {
+    // Rebuild the lock we expect: crates from this repository move
+    // current -> new, every other package (source, checksum, dependency edges)
+    // stays identical.
+    let mut expected: BTreeMap<(String, String), LockPackage> = BTreeMap::new();
+    for ((name, version), package) in &before_pkgs {
+        let key = if package.local && members.contains(name) && version == &current {
             (name.clone(), new.clone())
         } else {
             (name.clone(), version.clone())
         };
-        expected.insert(key, body.clone());
+        expected.insert(key, package.clone());
     }
 
     if expected == after_pkgs {
@@ -217,7 +218,14 @@ pub fn verify_lock_changes(
     ))
 }
 
-fn parse_lock_packages(content: &str) -> Result<BTreeMap<(String, String), String>> {
+#[derive(Clone, PartialEq, Eq)]
+struct LockPackage {
+    /// A crate in the repository has no `source`; anything cargo fetched does.
+    local: bool,
+    fields: String,
+}
+
+fn parse_lock_packages(content: &str) -> Result<BTreeMap<(String, String), LockPackage>> {
     let doc = content.parse::<DocumentMut>()?;
 
     let mut packages = BTreeMap::new();
@@ -238,7 +246,13 @@ fn parse_lock_packages(content: &str) -> Result<BTreeMap<(String, String), Strin
             }
             fields.sort();
 
-            packages.insert((name.to_string(), version.to_string()), fields.join("\n"));
+            packages.insert(
+                (name.to_string(), version.to_string()),
+                LockPackage {
+                    local: entry.get("source").is_none(),
+                    fields: fields.join("\n"),
+                },
+            );
         }
     }
 
@@ -593,6 +607,23 @@ mod tests {
             &before,
             &after,
             &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_verify_lock_changes_ignores_fetched_namesake() {
+        // This lock fetched `bar` from a registry at the version another
+        // workspace's member `bar` is being bumped from. It stays put.
+        let before = "version = 3\n\n[[package]]\nname = \"foo\"\nversion = \"1.0.0\"\n\n[[package]]\nname = \"bar\"\nversion = \"1.0.0\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\n";
+        let after = "version = 3\n\n[[package]]\nname = \"foo\"\nversion = \"1.1.0\"\n\n[[package]]\nname = \"bar\"\nversion = \"1.0.0\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\n";
+        assert!(verify_lock_changes(
+            before,
+            after,
+            &crates(&["foo", "bar"]),
             &Version::parse("1.0.0").unwrap(),
             &Version::parse("1.1.0").unwrap(),
             Path::new("Cargo.lock"),
