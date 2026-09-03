@@ -18,6 +18,9 @@ pub struct WorkspaceMembers {
 }
 
 impl WorkspaceMembers {
+    /// Any workspace's member counts. A workspace dependency can point by path
+    /// at a crate another workspace owns, and that pin still has to move with
+    /// the bump.
     pub fn contains_name(&self, name: &str) -> bool {
         self.names.contains(name)
     }
@@ -70,6 +73,30 @@ pub fn get_workspace_members() -> Result<WorkspaceMembers> {
     }
 
     Ok(members)
+}
+
+/// A lock sits at a workspace root, so the manifest beside it owns exactly the
+/// crates that lock may move.
+pub fn lock_member_names(lock: &Path) -> Result<BTreeSet<String>> {
+    let root = lock
+        .parent()
+        .ok_or_else(|| anyhow!("{} has no parent directory", lock.display()))?
+        .join("Cargo.toml");
+
+    let metadata = MetadataCommand::new()
+        .no_deps()
+        .manifest_path(&root)
+        .exec()
+        .context(format!("failed to read metadata for {}", root.display()))?;
+
+    let ids = member_ids(&metadata);
+
+    Ok(metadata
+        .packages
+        .iter()
+        .filter(|pkg| ids.contains(&pkg.id))
+        .map(|pkg| pkg.name.to_string())
+        .collect())
 }
 
 fn member_ids(metadata: &Metadata) -> HashSet<&PackageId> {
@@ -225,6 +252,82 @@ mod tests {
         assert!(!members.contains_manifest(&root_dir_path.join("stray/Cargo.toml")));
         assert!(members.is_root(&root_dir_path.join("Cargo.toml")));
         assert!(!members.is_root(&root_dir_path.join("stray/Cargo.toml")));
+    }
+
+    #[test]
+    #[serial]
+    fn test_lock_member_names_are_per_workspace() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let root_dir_path = root_dir.path();
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+        std::env::set_current_dir(root_dir_path).unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .output()
+            .unwrap();
+
+        let crate_at = |dir: &str, name: &str| {
+            let path = root_dir_path.join(dir);
+            std::fs::create_dir_all(path.join("src")).unwrap();
+            std::fs::write(
+                path.join("Cargo.toml"),
+                format!("[package]\nname = \"{name}\"\nversion = {{ workspace = true }}\n"),
+            )
+            .unwrap();
+            std::fs::write(path.join("src/lib.rs"), "").unwrap();
+        };
+
+        std::fs::write(
+            root_dir_path.join("Cargo.toml"),
+            "[workspace]\nmembers = [\"a\"]\nexclude = [\"sub\"]\n\n[workspace.package]\nversion = \"1.2.3\"\n",
+        )
+        .unwrap();
+        crate_at("a", "a");
+
+        std::fs::create_dir_all(root_dir_path.join("sub")).unwrap();
+        std::fs::write(
+            root_dir_path.join("sub/Cargo.toml"),
+            "[workspace]\nmembers = [\"b\"]\n\n[workspace.package]\nversion = \"1.2.3\"\n",
+        )
+        .unwrap();
+        crate_at("sub/b", "b");
+
+        let names =
+            |dir: &str| lock_member_names(&root_dir_path.join(dir).join("Cargo.lock")).unwrap();
+
+        assert_eq!(names("."), ["a".to_string()].into_iter().collect());
+        assert_eq!(names("sub"), ["b".to_string()].into_iter().collect());
+
+        // `get_workspace_members` still answers for the whole repository.
+        assert_eq!(
+            get_workspace_members().unwrap().names,
+            ["a".to_string(), "b".to_string()].into_iter().collect()
+        );
+    }
+
+    /// A single crate is its own workspace root, so its lock still gets a name.
+    #[test]
+    #[serial]
+    fn test_lock_member_names_single_crate() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let root_dir_path = root_dir.path();
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+        std::env::set_current_dir(root_dir_path).unwrap();
+
+        std::fs::create_dir(root_dir_path.join("src")).unwrap();
+        std::fs::write(
+            root_dir_path.join("Cargo.toml"),
+            "[package]\nname = \"solo\"\nversion = \"1.2.3\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        std::fs::write(root_dir_path.join("src/lib.rs"), "").unwrap();
+
+        assert_eq!(
+            lock_member_names(&root_dir_path.join("Cargo.lock")).unwrap(),
+            ["solo".to_string()].into_iter().collect()
+        );
     }
 
     #[test]
