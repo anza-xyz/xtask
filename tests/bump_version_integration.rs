@@ -4,6 +4,60 @@ use {
     std::{fs, path::Path, process::Command},
 };
 
+/// A repository with a single crate has no `[workspace.package]`, which used to
+/// make `bump-version` bail out before touching anything.
+#[test]
+#[serial]
+fn test_bump_version_single_crate() {
+    let root_dir = tempfile::tempdir().unwrap();
+    let root_path = fs::canonicalize(root_dir.path()).unwrap();
+    let original_dir = std::env::current_dir().unwrap();
+    defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+    std::env::set_current_dir(&root_path).unwrap();
+
+    Command::new("git").args(["init"]).output().unwrap();
+
+    fs::write(
+        root_path.join("Cargo.toml"),
+        "[package]\nname = \"solo\"\nversion = \"1.2.3\"\nedition = \"2021\"\n",
+    )
+    .unwrap();
+    fs::create_dir(root_path.join("src")).unwrap();
+    fs::write(root_path.join("src/lib.rs"), "").unwrap();
+
+    let lockfile = Command::new("cargo")
+        .args(["generate-lockfile"])
+        .output()
+        .unwrap();
+    assert!(
+        lockfile.status.success(),
+        "generate-lockfile should succeed: {}",
+        String::from_utf8_lossy(&lockfile.stderr)
+    );
+
+    let output = assert_cmd::cargo::cargo_bin_cmd!("cargo-anza-xtask")
+        .args(["anza-xtask", "bump-version", "patch"])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "bump version should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let manifest = fs::read_to_string(root_path.join("Cargo.toml")).unwrap();
+    assert!(
+        manifest.contains(r#"version = "1.2.4""#),
+        "package.version should be bumped: {manifest}"
+    );
+
+    let lock = fs::read_to_string(root_path.join("Cargo.lock")).unwrap();
+    assert!(
+        lock.contains(r#"version = "1.2.4""#),
+        "lock should be updated: {lock}"
+    );
+}
+
 #[test]
 #[serial]
 fn test_bump_version() {
