@@ -19,3 +19,16 @@ semver_check = true
 # these names, so release-plz's default (anza-xtask-v0.2.3) would break them.
 git_tag_name = "{{ package }}@v{{ version }}"
 git_release_name = "{{ package }}@v{{ version }}"
+
+[changelog]
+# Skip dependabot bumps. The parsers below the skip are release-plz's defaults,
+# restated because setting `commit_parsers` replaces them. First match wins.
+commit_parsers = [
+    { message = "^chore\\(deps\\): bump", skip = true },
+    { message = "^feat", group = "added" },
+    { message = "^changed", group = "changed" },
+    { message = "^deprecated", group = "deprecated" },
+    { message = "^fix", group = "fixed" },
+    { message = "^security", group = "security" },
+    { message = "^.*", group = "other" },
+]
