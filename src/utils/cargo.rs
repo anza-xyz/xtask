@@ -34,12 +34,18 @@ impl WorkspaceMembers {
 /// Probes only manifests declaring `[workspace]`: cargo reports an unclaimed
 /// package as its own single-member workspace, which would make every package
 /// in the repo a member.
+///
+/// The repository root is the one exception. A single-crate repository declares
+/// no workspace at all, and no manifest above it can claim it, so cargo's answer
+/// there is the true one.
 pub fn get_workspace_members() -> Result<WorkspaceMembers> {
     let mut members = WorkspaceMembers::default();
     let mut seen_roots = HashSet::new();
 
+    let root_manifest = normalize(&super::git::get_git_root_path()?.join("Cargo.toml"));
+
     for manifest in super::fs::find_all_cargo_tomls()? {
-        if !declares_workspace(&manifest)? {
+        if !declares_workspace(&manifest)? && normalize(&manifest) != root_manifest {
             continue;
         }
 
@@ -261,6 +267,34 @@ mod tests {
         assert!(!members.contains_manifest(&root_dir_path.join("stray/Cargo.toml")));
         assert!(members.is_root(&root_dir_path.join("Cargo.toml")));
         assert!(!members.is_root(&root_dir_path.join("stray/Cargo.toml")));
+    }
+
+    #[test]
+    #[serial]
+    fn test_get_workspace_members_single_crate() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let root_dir_path = root_dir.path();
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+        std::env::set_current_dir(root_dir_path).unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .output()
+            .unwrap();
+
+        std::fs::write(
+            root_dir_path.join("Cargo.toml"),
+            "[package]\nname = \"solo\"\nversion = \"0.2.2\"\nedition = \"2021\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root_dir_path.join("src")).unwrap();
+        std::fs::write(root_dir_path.join("src/lib.rs"), "").unwrap();
+
+        let members = get_workspace_members().unwrap();
+
+        assert_eq!(members.names, ["solo".to_string()].into_iter().collect());
+        assert!(members.contains_manifest(&root_dir_path.join("Cargo.toml")));
+        assert!(members.is_root(&root_dir_path.join("Cargo.toml")));
     }
 
     #[test]
