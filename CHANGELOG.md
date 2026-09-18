@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.3...anza-xtask@v0.2.4) - 2026-09-18
+
+### Added
+
+- *(jobs)* add jobs command ([#79](https://github.com/anza-xyz/xtask/pull/79))
+
+### Fixed
+
+- *(bump)* only bump lock entries for crates in the repository ([#74](https://github.com/anza-xyz/xtask/pull/74))
+- *(cargo)* read the version from single-crate repositories ([#73](https://github.com/anza-xyz/xtask/pull/73))
+
 ## [0.2.3](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.2...anza-xtask@v0.2.3) - 2026-09-03
 
 ### Added
