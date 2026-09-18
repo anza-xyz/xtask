@@ -25,6 +25,8 @@ struct Xtask {
 enum Commands {
     #[command(about = "Hello")]
     Hello,
+    #[command(about = "Print the number of parallel jobs this host can afford")]
+    Jobs,
     #[command(about = "Bump version")]
     BumpVersion(xtask::commands::bump_version::CommandArgs),
     #[command(about = "Update crate version")]
@@ -63,6 +65,7 @@ fn try_main() -> Result<()> {
 
     match xtask.command {
         Commands::Hello => xtask::commands::hello::run()?,
+        Commands::Jobs => xtask::commands::jobs::run()?,
         Commands::BumpVersion(args) => {
             xtask::commands::bump_version::run(args)?;
         }
