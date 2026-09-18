@@ -111,16 +111,30 @@ pub fn get_all_crates() -> Result<Vec<String>> {
 pub fn get_current_version() -> Result<String> {
     let git_root = super::git::get_git_root_path()?;
     let cargo_toml = git_root.join("Cargo.toml");
-    let content = fs::read_to_string(cargo_toml)?;
+    let content = fs::read_to_string(&cargo_toml)
+        .context(format!("failed to read {}", cargo_toml.display()))?;
+
+    manifest_version(&content).context(format!(
+        "failed to get version from {}",
+        cargo_toml.display()
+    ))
+}
+
+/// Falls back to `package.version` so single-crate repositories work too, not
+/// just workspaces that share an inherited version.
+pub fn manifest_version(content: &str) -> Result<String> {
     let doc = content.parse::<Document<String>>()?;
-    let Some(version) = doc
+    let version = doc
         .get("workspace")
         .and_then(|workspace| workspace.get("package"))
         .and_then(|package| package.get("version"))
+        .or_else(|| {
+            doc.get("package")
+                .and_then(|package| package.get("version"))
+        })
         .and_then(|version| version.as_str())
-    else {
-        return Err(anyhow!("failed to get version from Cargo.toml"));
-    };
+        .ok_or_else(|| anyhow!("no workspace.package.version or package.version"))?;
+
     Ok(version.to_string())
 }
 
@@ -183,6 +197,28 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_get_current_version_single_crate() {
+        let root_dir = tempfile::tempdir().unwrap();
+        let root_dir_path = root_dir.path();
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+        std::env::set_current_dir(root_dir_path).unwrap();
+        std::process::Command::new("git")
+            .args(["init"])
+            .output()
+            .unwrap();
+
+        std::fs::write(
+            root_dir_path.join("Cargo.toml"),
+            "[package]\nname = \"solo\"\nversion = \"0.2.2\"\n",
+        )
+        .unwrap();
+
+        assert_eq!(get_current_version().unwrap(), "0.2.2");
+    }
+
+    #[test]
+    #[serial]
     fn test_get_workspace_members() {
         let root_dir = tempfile::tempdir().unwrap();
         let root_dir_path = root_dir.path();
@@ -225,6 +261,39 @@ mod tests {
         assert!(!members.contains_manifest(&root_dir_path.join("stray/Cargo.toml")));
         assert!(members.is_root(&root_dir_path.join("Cargo.toml")));
         assert!(!members.is_root(&root_dir_path.join("stray/Cargo.toml")));
+    }
+
+    #[test]
+    fn test_manifest_version() {
+        assert_eq!(
+            manifest_version("[workspace.package]\nversion = \"3.1.0\"\n").unwrap(),
+            "3.1.0"
+        );
+
+        // A single-crate repository has no workspace section at all.
+        assert_eq!(
+            manifest_version("[package]\nname = \"foo\"\nversion = \"0.2.2\"\n").unwrap(),
+            "0.2.2"
+        );
+
+        // The workspace version wins when both are present.
+        assert_eq!(
+            manifest_version(
+                "[workspace.package]\nversion = \"3.1.0\"\n\n[package]\nname = \"foo\"\nversion = \"0.2.2\"\n"
+            )
+            .unwrap(),
+            "3.1.0"
+        );
+
+        // An inherited version is not a version anyone can bump here.
+        assert_eq!(
+            manifest_version("[package]\nname = \"foo\"\nversion = { workspace = true }\n")
+                .unwrap_err()
+                .to_string(),
+            "no workspace.package.version or package.version"
+        );
+
+        assert!(manifest_version("[package\n").is_err());
     }
 
     #[test]
