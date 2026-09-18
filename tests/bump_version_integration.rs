@@ -122,6 +122,13 @@ fn test_bump_version() {
         "Cargo.lock should be updated"
     );
 
+    // verify root/stray/Cargo.toml
+    let stray_cargo_toml_content = fs::read_to_string(root_path.join("stray/Cargo.toml")).unwrap();
+    assert!(
+        stray_cargo_toml_content.contains(r#"version = "1.2.3""#),
+        "a package no workspace claims should not be bumped"
+    );
+
     // verify root/d/Cargo.toml
     let d_cargo_toml_content = fs::read_to_string(root_path.join("d/Cargo.toml")).unwrap();
     assert!(
