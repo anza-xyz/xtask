@@ -4,3 +4,4 @@ pub mod hello;
 pub mod jobs;
 pub mod publish;
 pub mod update_crate;
+pub mod verify_bump;
