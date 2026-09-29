@@ -304,17 +304,10 @@ fn write_custom_registry_config() -> Result<()> {
 }
 
 fn start_docker_registry() -> Result<String> {
+    // Let Docker assign a unique name and keep the registry port private.
+    // Publishers join this container's network namespace using its ID.
     let output = Command::new("docker")
-        .args([
-            "run",
-            "--rm",
-            "-d",
-            "--name",
-            "kellnr",
-            "-p",
-            "8000:8000",
-            "ghcr.io/kellnr/kellnr:5",
-        ])
+        .args(["run", "--rm", "-d", "ghcr.io/kellnr/kellnr:5"])
         .output()
         .map_err(|e| anyhow!("Failed to start docker container: {e}"))?;
 
@@ -382,10 +375,11 @@ fn publish_test(manifest_path: &str) -> Result<()> {
 
             let package_name = package_info.name.clone();
             let package_path = package_info.path.clone();
+            let container_id = container_id.clone();
 
             info!("  publishing package: {package_name}");
             let handle = thread::spawn(move || -> Result<String> {
-                publish_package_with_docker(package_name.clone(), &package_path)
+                publish_package_with_docker(package_name.clone(), &package_path, &container_id)
                     .map_err(|e| anyhow!("Failed to publish package {package_name}: {e}"))?;
                 info!("    ✅ {package_name} published");
                 Ok(package_name)
@@ -430,7 +424,11 @@ fn publish_test(manifest_path: &str) -> Result<()> {
     Ok(())
 }
 
-fn publish_package_with_docker(package_name: String, package_path: &Path) -> Result<String> {
+fn publish_package_with_docker(
+    package_name: String,
+    package_path: &Path,
+    container_id: &str,
+) -> Result<String> {
     let git_root = get_git_root_path()?;
     let relative_package_path = package_path.strip_prefix(&git_root).unwrap_or(package_path);
     let manifest_path = relative_package_path.join("Cargo.toml");
@@ -446,7 +444,10 @@ fn publish_package_with_docker(package_name: String, package_path: &Path) -> Res
             "--no-verify",
         ])
         .current_dir(&git_root)
-        .env("EXTRA_DOCKER_RUN_ARGS", "--network container:kellnr")
+        .env(
+            "EXTRA_DOCKER_RUN_ARGS",
+            format!("--network container:{container_id}"),
+        )
         .output()
         .map_err(|e| anyhow::anyhow!("Failed to publish package: {e}"))
         .unwrap();
