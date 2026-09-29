@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.5](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.4...anza-xtask@v0.2.5) - 2026-09-29
+
+### Added
+
+- *(verify-bump)* add verify-bump command ([#80](https://github.com/anza-xyz/xtask/pull/80))
+
+### Fixed
+
+- isolate kellnr containers for concurrent publish tests ([#86](https://github.com/anza-xyz/xtask/pull/86))
+- *(cargo)* treat the repo root manifest as a workspace root ([#81](https://github.com/anza-xyz/xtask/pull/81))
+
 ## [0.2.4](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.3...anza-xtask@v0.2.4) - 2026-09-18
 
 ### Added
