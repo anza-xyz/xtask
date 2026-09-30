@@ -27,6 +27,7 @@ fn init_fixture() -> PathBuf {
         "a",
         "b",
         "d",
+        "stray",
         "sub",
     ]);
     git(&[

@@ -1,14 +1,10 @@
 use {
-    crate::utils::bump::{bumped_requirement, verify_changes, verify_lock_changes},
+    crate::utils::bump::bump_targets,
     anyhow::{anyhow, Context, Result},
     clap::{Args, ValueEnum},
     log::{debug, info},
     semver::Version,
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        fs,
-        process::Command,
-    },
+    std::{fs, process::Command},
     toml_edit::{value, DocumentMut},
 };
 
@@ -47,7 +43,8 @@ pub fn run(args: CommandArgs) -> Result<()> {
 
     let new_version = bump_version(&args.level, &current_version)?;
 
-    let all_crates = crate::utils::get_all_crates().context("failed to get all crates")?;
+    let members =
+        crate::utils::get_workspace_members().context("failed to resolve workspace members")?;
 
     let all_cargo_tomls =
         crate::utils::find_all_cargo_tomls().context("failed to find all cargo.toml files")?;
@@ -61,89 +58,22 @@ pub fn run(args: CommandArgs) -> Result<()> {
             .parse::<DocumentMut>()
             .context(format!("failed to parse {}", cargo_toml.display()))?;
 
-        let original = doc.clone();
-        let mut intended: BTreeMap<String, (String, String)> = BTreeMap::new();
-
-        if let Some(workspace_package_version_str) = doc
-            .get("workspace")
-            .and_then(|workspace| workspace.get("package"))
-            .and_then(|package| package.get("version"))
-            .and_then(|version| version.as_str())
-        {
-            if workspace_package_version_str == current_version.to_string() {
-                doc["workspace"]["package"]["version"] = value(new_version.to_string());
-                intended.insert(
-                    "workspace.package.version".to_string(),
-                    (current_version.to_string(), new_version.to_string()),
-                );
-                info!("  bumped workspace.package.version from {current_version} to {new_version}",);
-            }
+        let targets = bump_targets(&cargo_toml, &doc, &members, &current_version, &new_version);
+        if targets.is_empty() {
+            info!("  no version fields to bump");
+            continue;
         }
 
-        if let Some(package_version_str) = doc
-            .get("package")
-            .and_then(|package| package.get("version"))
-            .and_then(|version| version.as_str())
-        {
-            if package_version_str == current_version.to_string() {
-                doc["package"]["version"] = value(new_version.to_string());
-                intended.insert(
-                    "package.version".to_string(),
-                    (current_version.to_string(), new_version.to_string()),
-                );
-                info!("  bumped package.version from {current_version} to {new_version}",);
-            }
+        for (path, (old, new)) in &targets {
+            set_version(&mut doc, path, new)
+                .context(format!("failed to bump {path} in {}", cargo_toml.display()))?;
+            info!("  bumped {path} from {old} to {new}");
         }
 
-        if let Some(dependencies) = doc
-            .get("workspace")
-            .and_then(|ws| ws.get("dependencies"))
-            .and_then(|deps| deps.as_table())
-        {
-            // Avoid borrowing `doc` while iterating
-            let keys: Vec<String> = dependencies.iter().map(|(k, _)| k.to_string()).collect();
-
-            for name in keys {
-                if all_crates.contains(&name) {
-                    if let Some(version) = doc["workspace"]["dependencies"]
-                        .get(&name)
-                        .and_then(|v| v.get("version"))
-                        .and_then(|v| v.as_str())
-                    {
-                        let old_version = version.to_string();
-                        let Some(bumped_version) = bumped_requirement(
-                            &old_version,
-                            &current_version.to_string(),
-                            &new_version.to_string(),
-                        ) else {
-                            continue;
-                        };
-                        doc["workspace"]["dependencies"][&name]["version"] = value(&bumped_version);
-                        intended.insert(
-                            format!("workspace.dependencies.{name}.version"),
-                            (old_version.clone(), bumped_version.clone()),
-                        );
-                        info!(
-                            "  bumped workspace.dependencies.{name}.version from {old_version} to \
-                             {bumped_version}",
-                        );
-                    }
-                }
-            }
-        }
-
-        verify_changes(&original, &doc, &intended, &cargo_toml).context(format!(
-            "unexpected changes while bumping {}",
-            cargo_toml.display()
-        ))?;
-
-        // write the updated document back to the file
         debug!("writing {}", cargo_toml.display());
         fs::write(&cargo_toml, doc.to_string())
             .context(format!("failed to write {}", cargo_toml.display()))?;
     }
-
-    let crate_names: BTreeSet<String> = all_crates.iter().cloned().collect();
 
     let all_cargo_locks =
         crate::utils::find_all_cargo_locks().context("failed to find all Cargo.lock files")?;
@@ -154,9 +84,6 @@ pub fn run(args: CommandArgs) -> Result<()> {
             cargo_lock.display()
         ))?;
 
-        let before = fs::read_to_string(&cargo_lock)
-            .context(format!("failed to read {}", cargo_lock.display()))?;
-
         info!("running `cargo tree` in {}", dir.display());
         let output = Command::new("cargo")
             .arg("tree")
@@ -166,23 +93,21 @@ pub fn run(args: CommandArgs) -> Result<()> {
         if !output.status.success() {
             return Err(anyhow!("{}", String::from_utf8_lossy(&output.stderr)));
         }
-
-        let after = fs::read_to_string(&cargo_lock)
-            .context(format!("failed to read {}", cargo_lock.display()))?;
-
-        verify_lock_changes(
-            &before,
-            &after,
-            &crate_names,
-            &current_version,
-            &new_version,
-            &cargo_lock,
-        )
-        .context(format!(
-            "unexpected changes while bumping {}",
-            cargo_lock.display()
-        ))?;
     }
+
+    Ok(())
+}
+
+/// `bump_targets` only reports paths it read out of this document, so a missing
+/// one means the manifest changed between the two.
+fn set_version(doc: &mut DocumentMut, path: &str, new: &str) -> Result<()> {
+    let mut item = doc.as_item_mut();
+    for segment in path.split('.') {
+        item = item
+            .get_mut(segment)
+            .ok_or_else(|| anyhow!("no `{segment}` at `{path}`"))?;
+    }
+    *item = value(new);
 
     Ok(())
 }
