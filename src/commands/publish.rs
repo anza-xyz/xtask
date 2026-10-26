@@ -1,10 +1,14 @@
 use {
-    crate::utils::{check_docker_available, get_git_root_path},
+    crate::{
+        commands::bump_version::set_workspace_version,
+        utils::{check_docker_available, get_current_version, get_git_root_path},
+    },
     anyhow::{anyhow, Result},
     cargo_metadata::{MetadataCommand, PackageId},
     clap::{Args, Subcommand},
     log::info,
     scopeguard::defer,
+    semver::{Prerelease, Version},
     std::{
         collections::{HashMap, HashSet},
         fs,
@@ -320,6 +324,15 @@ fn start_docker_registry() -> Result<String> {
     Ok(container_id)
 }
 
+/// A version that doesn't exist on crates.io, so workspace deps resolve
+/// only if an earlier publish layer already put them in kellnr.
+fn publish_test_version(current: &Version) -> Result<Version> {
+    let mut version = current.clone();
+    version.pre = Prerelease::new("xtask-publish-test")?;
+
+    Ok(version)
+}
+
 fn publish_test(manifest_path: &str) -> Result<()> {
     defer! {
         let git_root = get_git_root_path().unwrap();
@@ -333,6 +346,13 @@ fn publish_test(manifest_path: &str) -> Result<()> {
 
     info!("checking docker");
     check_docker_available()?;
+
+    // The workspace version is usually already on crates.io, which silently
+    // satisfies deps not yet in kellnr and hides publish-order bugs.
+    let current_version = Version::parse(&get_current_version()?)?;
+    let test_version = publish_test_version(&current_version)?;
+    info!("bumping workspace version from {current_version} to {test_version}");
+    set_workspace_version(&current_version, &test_version)?;
 
     info!("writing custom registry config to config file");
     write_custom_registry_config()?;
@@ -499,6 +519,18 @@ mod tests {
             .join(relative)
             .to_string_lossy()
             .to_string()
+    }
+
+    #[test]
+    fn test_publish_test_version() {
+        assert_eq!(
+            publish_test_version(&Version::parse("4.5.0-alpha.2").unwrap()).unwrap(),
+            Version::parse("4.5.0-xtask-publish-test").unwrap()
+        );
+        assert_eq!(
+            publish_test_version(&Version::parse("4.2.3").unwrap()).unwrap(),
+            Version::parse("4.2.3-xtask-publish-test").unwrap()
+        );
     }
 
     #[test]

@@ -43,6 +43,12 @@ pub fn run(args: CommandArgs) -> Result<()> {
 
     let new_version = bump_version(&args.level, &current_version)?;
 
+    set_workspace_version(&current_version, &new_version)
+}
+
+/// Rewrites every workspace version field pinned to `current_version` and
+/// refreshes each `Cargo.lock` to match.
+pub fn set_workspace_version(current_version: &Version, new_version: &Version) -> Result<()> {
     let members =
         crate::utils::get_workspace_members().context("failed to resolve workspace members")?;
 
@@ -58,7 +64,7 @@ pub fn run(args: CommandArgs) -> Result<()> {
             .parse::<DocumentMut>()
             .context(format!("failed to parse {}", cargo_toml.display()))?;
 
-        let targets = bump_targets(&cargo_toml, &doc, &members, &current_version, &new_version);
+        let targets = bump_targets(&cargo_toml, &doc, &members, current_version, new_version);
         if targets.is_empty() {
             info!("  no version fields to bump");
             continue;
