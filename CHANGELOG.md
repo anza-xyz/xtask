@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.5...anza-xtask@v0.2.6) - 2026-10-27
+
+### Fixed
+
+- *(publish)* run publish test against an unpublished version ([#93](https://github.com/anza-xyz/xtask/pull/93))
+- *(bump)* only bump crates a workspace claims ([#85](https://github.com/anza-xyz/xtask/pull/85))
+
 ## [0.2.5](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.4...anza-xtask@v0.2.5) - 2026-09-29
 
 ### Added
