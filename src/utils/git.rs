@@ -75,6 +75,29 @@ pub fn changed_files_since(rev: &str) -> Result<Vec<PathBuf>> {
         .collect())
 }
 
+pub fn diff_since(rev: &str, path: &Path) -> Result<String> {
+    // Paths from `changed_files_since` are relative to the root, not to cwd.
+    let pathspec = format!(":(top,literal){}", path.display());
+    let output = Command::new("git")
+        .args(["diff", "--no-color", "--no-ext-diff", rev, "--", &pathspec])
+        .output()
+        .map_err(|e| {
+            anyhow!(
+                "failed to diff {} against {rev}, error: {e}",
+                path.display()
+            )
+        })?;
+    if !output.status.success() {
+        return Err(anyhow!(
+            "failed to diff {} against {rev}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 pub fn repo_relative_path(root: &Path, path: &Path) -> Result<String> {
     let relative = path
         .strip_prefix(root)
@@ -220,6 +243,33 @@ mod tests {
 
         let err = changed_files_since("no-such-rev").unwrap_err().to_string();
         assert!(err.contains("failed to diff against no-such-rev"), "{err}");
+    }
+
+    #[test]
+    #[serial]
+    fn test_diff_since() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        init_repo(temp_dir.path());
+
+        let original_dir = std::env::current_dir().unwrap();
+        defer! { std::env::set_current_dir(&original_dir).unwrap(); }
+        // Root-relative paths must resolve from a subdirectory too.
+        std::env::set_current_dir(temp_dir.path().join("dir")).unwrap();
+
+        assert_eq!(diff_since("HEAD", Path::new("kept.txt")).unwrap(), "");
+
+        fs::write(temp_dir.path().join("kept.txt"), "changed\n").unwrap();
+
+        let diff = diff_since("HEAD", Path::new("kept.txt")).unwrap();
+        assert!(diff.contains("-kept\n+changed\n"), "{diff}");
+
+        let err = diff_since("no-such-rev", Path::new("kept.txt"))
+            .unwrap_err()
+            .to_string();
+        assert!(
+            err.contains("failed to diff kept.txt against no-such-rev"),
+            "{err}"
+        );
     }
 
     #[test]

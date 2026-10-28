@@ -124,6 +124,11 @@ fn test_verify_bump_detects_unrelated_file_change() {
         "{}",
         stderr(&output)
     );
+    assert!(
+        stderr(&output).contains("    +// sneaky"),
+        "{}",
+        stderr(&output)
+    );
 }
 
 #[test]
