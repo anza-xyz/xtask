@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.6...anza-xtask@v0.2.7) - 2026-11-06
+
+### Added
+
+- *(bump-dependency)* bump a crate without flipping unrelated lock edges ([#97](https://github.com/anza-xyz/xtask/pull/97))
+
 ## [0.2.6](https://github.com/anza-xyz/xtask/compare/anza-xtask@v0.2.5...anza-xtask@v0.2.6) - 2026-10-27
 
 ### Fixed
