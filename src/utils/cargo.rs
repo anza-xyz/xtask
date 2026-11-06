@@ -1,14 +1,35 @@
 use {
     anyhow::{anyhow, Context, Result},
     cargo_metadata::{Metadata, MetadataCommand, PackageId},
-    log::warn,
+    log::{info, warn},
     std::{
         collections::{BTreeSet, HashSet},
         fs,
         path::{Path, PathBuf},
+        process::Command,
     },
     toml_edit::Document,
 };
+
+pub fn run_in_lock_dir(cargo_lock: &Path, args: &[&str]) -> Result<()> {
+    let dir = cargo_lock.parent().context(format!(
+        "failed to get {}'s parent directory",
+        cargo_lock.display()
+    ))?;
+    let command = format!("`cargo {}` in {}", args.join(" "), dir.display());
+
+    info!("running {command}");
+    let output = Command::new("cargo")
+        .args(args)
+        .current_dir(dir)
+        .output()
+        .context(format!("failed to run {command}"))?;
+    if !output.status.success() {
+        return Err(anyhow!("{}", String::from_utf8_lossy(&output.stderr)));
+    }
+
+    Ok(())
+}
 
 #[derive(Debug, Default)]
 pub struct WorkspaceMembers {

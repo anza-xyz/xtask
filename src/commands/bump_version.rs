@@ -4,7 +4,7 @@ use {
     clap::{Args, ValueEnum},
     log::{debug, info},
     semver::Version,
-    std::{fs, process::Command},
+    std::fs,
     toml_edit::{value, DocumentMut},
 };
 
@@ -85,20 +85,7 @@ pub fn set_workspace_version(current_version: &Version, new_version: &Version) -
         crate::utils::find_all_cargo_locks().context("failed to find all Cargo.lock files")?;
     info!("found {} Cargo.lock files", all_cargo_locks.len());
     for cargo_lock in all_cargo_locks {
-        let dir = cargo_lock.parent().context(format!(
-            "failed to get {}'s parent directory",
-            cargo_lock.display()
-        ))?;
-
-        info!("running `cargo tree` in {}", dir.display());
-        let output = Command::new("cargo")
-            .arg("tree")
-            .current_dir(dir)
-            .output()
-            .context(format!("failed to run `cargo tree` in {}", dir.display()))?;
-        if !output.status.success() {
-            return Err(anyhow!("{}", String::from_utf8_lossy(&output.stderr)));
-        }
+        crate::utils::run_in_lock_dir(&cargo_lock, &["tree"])?;
     }
 
     Ok(())
