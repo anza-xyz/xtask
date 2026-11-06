@@ -29,17 +29,12 @@ pub fn run(args: CommandArgs) -> Result<()> {
         (&["dev-dependencies"], "dev-dependencies"),
     ];
 
-    'MAIN_LOOP: for cargo_toml in all_cargo_tomls {
+    for cargo_toml in all_cargo_tomls {
         info!("[{}]", cargo_toml.display());
 
-        for exclude_path in &args.exclude_paths {
-            if cargo_toml
-                .to_string_lossy()
-                .contains(exclude_path.to_string_lossy().as_ref())
-            {
-                info!("  ⏩ skipped (exclude path)");
-                continue 'MAIN_LOOP;
-            }
+        if utils::is_excluded(&cargo_toml, &args.exclude_paths) {
+            info!("  ⏩ skipped (exclude path)");
+            continue;
         }
 
         let content = fs::read_to_string(&cargo_toml)?;

@@ -33,6 +33,8 @@ enum Commands {
     VerifyBump(xtask::commands::verify_bump::CommandArgs),
     #[command(about = "Update crate version")]
     UpdateCrate(xtask::commands::update_crate::CommandArgs),
+    #[command(about = "Bump a dependency in every lock file, keeping unrelated edges")]
+    BumpDependency(xtask::commands::bump_dependency::CommandArgs),
     #[command(about = "Publish crates")]
     Publish(xtask::commands::publish::CommandArgs),
     #[command(about = "Check dev-dependencies")]
@@ -76,6 +78,9 @@ fn try_main() -> Result<()> {
         }
         Commands::UpdateCrate(args) => {
             xtask::commands::update_crate::run(args)?;
+        }
+        Commands::BumpDependency(args) => {
+            xtask::commands::bump_dependency::run(args)?;
         }
         Commands::Publish(args) => {
             xtask::commands::publish::run(args)?;

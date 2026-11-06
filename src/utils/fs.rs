@@ -36,6 +36,13 @@ pub fn find_all_cargo_locks() -> Result<Vec<PathBuf>> {
     find_files_by_name(&super::git::get_git_root_path()?, "Cargo.lock")
 }
 
+pub fn is_excluded(path: &Path, exclude_paths: &[PathBuf]) -> bool {
+    let path = path.to_string_lossy();
+    exclude_paths
+        .iter()
+        .any(|exclude| path.contains(exclude.to_string_lossy().as_ref()))
+}
+
 #[cfg(test)]
 mod tests {
     use {

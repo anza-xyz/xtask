@@ -1,3 +1,4 @@
+pub mod bump_dependency;
 pub mod bump_version;
 pub mod dev_deps;
 pub mod hello;
