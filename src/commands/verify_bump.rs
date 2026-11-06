@@ -3,7 +3,10 @@ use {
         bump::{bump_targets, verify_changes, verify_lock_changes},
         cargo::WorkspaceMembers,
         find_all_cargo_locks, find_all_cargo_tomls, get_git_root_path, get_workspace_members,
-        git::{changed_files_since, ensure_rev_exists, repo_relative_path, show_file_at_rev},
+        git::{
+            changed_files_since, diff_since, ensure_rev_exists, repo_relative_path,
+            show_file_at_rev,
+        },
     },
     anyhow::{anyhow, Context, Result},
     clap::Args,
@@ -15,6 +18,8 @@ use {
     },
     toml_edit::DocumentMut,
 };
+
+const MAX_DIFF_LINES: usize = 50;
 
 #[derive(Args)]
 pub struct CommandArgs {
@@ -78,8 +83,12 @@ impl Verifier {
             let name = path.file_name().unwrap_or_default();
 
             if name != "Cargo.toml" && name != "Cargo.lock" {
-                self.problems
-                    .push(format!("  unexpected change to `{}`", path.display()));
+                let diff = diff_since(&self.base, &path)?;
+                self.problems.push(format!(
+                    "  unexpected change to `{}`:\n{}",
+                    path.display(),
+                    truncate_diff(&diff)
+                ));
             } else if !self.root.join(&path).exists() {
                 // The checks below walk the working tree, so a manifest or lock
                 // deleted since the base would otherwise go unseen.
@@ -213,10 +222,43 @@ fn parse(content: &str, path: &Path) -> Result<DocumentMut> {
         .context(format!("failed to parse {}", path.display()))
 }
 
+fn truncate_diff(diff: &str) -> String {
+    let lines: Vec<&str> = diff.lines().collect();
+
+    let mut out: Vec<String> = lines
+        .iter()
+        .take(MAX_DIFF_LINES)
+        .map(|line| format!("    {line}"))
+        .collect();
+    if lines.len() > MAX_DIFF_LINES {
+        out.push(format!(
+            "    ... {} more lines",
+            lines.len().saturating_sub(MAX_DIFF_LINES)
+        ));
+    }
+
+    out.join("\n")
+}
+
 fn indent(err: &anyhow::Error) -> String {
     err.to_string()
         .lines()
         .map(|line| format!("  {line}"))
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use {super::*, pretty_assertions::assert_eq};
+
+    #[test]
+    fn test_truncate_diff() {
+        assert_eq!(truncate_diff("-a\n+b\n"), "    -a\n    +b");
+
+        let long: String = (0..MAX_DIFF_LINES + 3).map(|i| format!("+{i}\n")).collect();
+        let out = truncate_diff(&long);
+        assert_eq!(out.lines().count(), MAX_DIFF_LINES + 1);
+        assert!(out.ends_with("    ... 3 more lines"), "{out}");
+    }
 }
