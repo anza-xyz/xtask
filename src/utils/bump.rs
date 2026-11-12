@@ -199,7 +199,10 @@ pub fn verify_lock_changes(
     for key @ (name, version) in keys {
         match (expected.get(key), after_pkgs.get(key)) {
             (Some(want), Some(got)) if want != got => {
-                errors.push(format!("  unexpected change to package `{name} {version}`"));
+                errors.push(format!(
+                    "  unexpected change to package `{name} {version}`:"
+                ));
+                errors.extend(field_changes(&want.fields, &got.fields));
             }
             (Some(_), None) => {
                 errors.push(format!("  missing package `{name} {version}` after bump"));
@@ -222,7 +225,38 @@ pub fn verify_lock_changes(
 struct LockPackage {
     /// A crate in the repository has no `source`; anything cargo fetched does.
     local: bool,
-    fields: String,
+    /// Array entries are set members, so a change names the entries that moved.
+    fields: BTreeMap<String, BTreeSet<String>>,
+}
+
+fn field_changes(
+    want: &BTreeMap<String, BTreeSet<String>>,
+    got: &BTreeMap<String, BTreeSet<String>>,
+) -> Vec<String> {
+    let empty = BTreeSet::new();
+    let keys: BTreeSet<&String> = want.keys().chain(got.keys()).collect();
+
+    let mut changes = vec![];
+    for key in keys {
+        let before = want.get(key).unwrap_or(&empty);
+        let after = got.get(key).unwrap_or(&empty);
+
+        let mut parts = vec![];
+        let removed: Vec<&str> = before.difference(after).map(String::as_str).collect();
+        if !removed.is_empty() {
+            parts.push(format!("removed {}", removed.join(", ")));
+        }
+        let added: Vec<&str> = after.difference(before).map(String::as_str).collect();
+        if !added.is_empty() {
+            parts.push(format!("added {}", added.join(", ")));
+        }
+
+        if !parts.is_empty() {
+            changes.push(format!("    `{key}`: {}", parts.join("; ")));
+        }
+    }
+
+    changes
 }
 
 fn parse_lock_packages(content: &str) -> Result<BTreeMap<(String, String), LockPackage>> {
@@ -237,20 +271,27 @@ fn parse_lock_packages(content: &str) -> Result<BTreeMap<(String, String), LockP
                 continue;
             };
 
-            let mut fields = vec![];
+            let mut fields = BTreeMap::new();
             for (key, item) in entry.iter() {
                 if key == "name" || key == "version" {
                     continue;
                 }
-                fields.push(format!("{key}={}", item.to_string().trim()));
+
+                let values = match item.as_array() {
+                    Some(array) => array
+                        .iter()
+                        .map(|value| value.to_string().trim().to_string())
+                        .collect(),
+                    None => BTreeSet::from([item.to_string().trim().to_string()]),
+                };
+                fields.insert(key.to_string(), values);
             }
-            fields.sort();
 
             packages.insert(
                 (name.to_string(), version.to_string()),
                 LockPackage {
                     local: entry.get("source").is_none(),
-                    fields: fields.join("\n"),
+                    fields,
                 },
             );
         }
@@ -592,9 +633,34 @@ mod tests {
         .unwrap_err()
         .to_string();
         assert!(
-            err.contains("unexpected change to package `tokio 1.52.3`"),
+            err.contains(
+                "unexpected change to package `tokio 1.52.3`:\n    `dependencies`: removed \"windows-sys 0.61.0\"; added \"windows-sys 0.45.0\""
+            ),
             "{err}"
         );
+    }
+
+    #[test]
+    fn test_verify_lock_changes_names_changed_checksum() {
+        let before = "version = 3\n\n[[package]]\nname = \"foo\"\nversion = \"1.0.0\"\n\n[[package]]\nname = \"serde\"\nversion = \"1.0.150\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\nchecksum = \"aaaa\"\n";
+        let after = "version = 3\n\n[[package]]\nname = \"foo\"\nversion = \"1.1.0\"\n\n[[package]]\nname = \"serde\"\nversion = \"1.0.150\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\nchecksum = \"bbbb\"\n";
+        let err = verify_lock_changes(
+            before,
+            after,
+            &crates(&["foo"]),
+            &Version::parse("1.0.0").unwrap(),
+            &Version::parse("1.1.0").unwrap(),
+            Path::new("Cargo.lock"),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(
+            err.contains(
+                "unexpected change to package `serde 1.0.150`:\n    `checksum`: removed \"aaaa\"; added \"bbbb\""
+            ),
+            "{err}"
+        );
+        assert!(!err.contains("`source`"), "{err}");
     }
 
     #[test]
